@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - run: dotnet restore
+
+      - run: dotnet build --no-restore --configuration Release
+
+      # The suite stubs whisper-server over HTTP and uses in-memory SQLite, so it needs
+      # neither ffmpeg nor a GPU.
+      - run: dotnet test --no-build --configuration Release --verbosity normal

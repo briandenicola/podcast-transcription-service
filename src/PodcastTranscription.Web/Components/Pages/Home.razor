@@ -1,0 +1,79 @@
+@page "/"
+@using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject WhisperClient Whisper
+
+<PageTitle>Library</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Library</h1>
+    <a class="btn btn-primary" href="/upload">Add episode</a>
+</div>
+
+<div class="alert @(_whisperReachable ? "alert-success" : "alert-warning") d-flex justify-content-between align-items-center py-2">
+    <span>
+        <strong>whisper-server</strong>
+        <code class="ms-1">@Whisper.Endpoint</code>
+        <span class="ms-2 text-muted">model @Whisper.Model</span>
+    </span>
+    <span>@(_whisperReachable ? "reachable" : "unreachable")</span>
+</div>
+
+@if (_episodes is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (_episodes.Count == 0)
+{
+    <p class="text-muted">Nothing here yet. <a href="/upload">Upload an episode</a> to get started.</p>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Show</th>
+                <th class="text-end">Duration</th>
+                <th>Added</th>
+                <th class="text-end">Transcripts</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var episode in _episodes)
+            {
+                <tr>
+                    <td>@episode.Title</td>
+                    <td class="text-muted">@(episode.Show ?? "—")</td>
+                    <td class="text-end font-monospace">@TimeFormat.Duration(episode.DurationSec)</td>
+                    <td class="text-muted">@episode.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-end">@episode.Transcripts.Count</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-secondary" href="/episodes/@episode.Id">Open</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Episode>? _episodes;
+    private bool _whisperReachable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _episodes = await db.Episodes
+            .Include(e => e.Transcripts)
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(200)
+            .ToListAsync();
+
+        _whisperReachable = await Whisper.IsReachableAsync();
+    }
+}

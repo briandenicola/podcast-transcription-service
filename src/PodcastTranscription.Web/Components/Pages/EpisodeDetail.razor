@@ -1,0 +1,174 @@
+@page "/episodes/{EpisodeId:int}"
+@using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@implements IDisposable
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject TranscriptionService Transcription
+@inject WhisperClient Whisper
+@inject ILogger<EpisodeDetail> Log
+
+<PageTitle>@(_episode?.Title ?? "Episode")</PageTitle>
+
+@if (_episode is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h1 class="h3 mb-1">@_episode.Title</h1>
+            <div class="text-muted small">
+                @(_episode.Show ?? "No show")
+                · @TimeFormat.Duration(_episode.DurationSec)
+                · added @_episode.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </div>
+        </div>
+        <div class="text-end">
+            <button class="btn btn-primary" @onclick="Transcribe" disabled="@_running">
+                @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
+            </button>
+            @if (_running)
+            {
+                <button class="btn btn-outline-secondary ms-2" @onclick="Cancel">Cancel</button>
+            }
+        </div>
+    </div>
+
+    @if (_status is not null)
+    {
+        <div class="alert @(_failed ? "alert-danger" : "alert-info") d-flex align-items-center">
+            @if (_running)
+            {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            }
+            <span>@_status</span>
+        </div>
+    }
+
+    @if (_transcripts.Count == 0)
+    {
+        <p class="text-muted">No transcript yet.</p>
+    }
+    else
+    {
+        @if (_transcripts.Count > 1)
+        {
+            <ul class="nav nav-pills mb-3">
+                @foreach (var t in _transcripts)
+                {
+                    <li class="nav-item">
+                        <button class="nav-link @(t.Id == _selected?.Id ? "active" : "")" @onclick="() => Select(t)">
+                            @t.Model
+                            <span class="small opacity-75">@t.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")</span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (_selected is not null)
+        {
+            <div class="text-muted small mb-2">
+                @_selected.Segments.Count segments
+                · model @_selected.Model
+                · language @(_selected.Language ?? "unknown")
+                @if (_selected.RealtimeFactor is { } factor)
+                {
+                    <span> · @factor.ToString("N1")× realtime</span>
+                }
+            </div>
+
+            <div class="transcript">
+                @foreach (var segment in _selected.Segments)
+                {
+                    <div class="transcript-line">
+                        <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
+                        <span class="transcript-text">@segment.Text</span>
+                    </div>
+                }
+            </div>
+        }
+    }
+}
+
+@code {
+    [Parameter] public int EpisodeId { get; set; }
+
+    private Episode? _episode;
+    private List<Transcript> _transcripts = [];
+    private Transcript? _selected;
+    private string? _status;
+    private bool _running;
+    private bool _failed;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _episode = await db.Episodes.FirstOrDefaultAsync(e => e.Id == EpisodeId);
+        if (_episode is null)
+        {
+            return;
+        }
+
+        _transcripts = await db.Transcripts
+            .Where(t => t.EpisodeId == EpisodeId)
+            .Include(t => t.Segments.OrderBy(s => s.Ordinal))
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        _selected = _transcripts.FirstOrDefault();
+    }
+
+    private void Select(Transcript transcript) => _selected = transcript;
+
+    private async Task Transcribe()
+    {
+        _running = true;
+        _failed = false;
+        _status = "Starting…";
+        _cts = new CancellationTokenSource();
+
+        var progress = new Progress<string>(message =>
+        {
+            _status = message;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await Transcription.TranscribeAsync(EpisodeId, progress, _cts.Token);
+            await LoadAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            _status = "Cancelled.";
+        }
+        catch (Exception ex)
+        {
+            Log.LogError(ex, "Transcription failed for episode {EpisodeId}", EpisodeId);
+            _failed = true;
+            _status = $"Failed: {ex.Message}";
+        }
+        finally
+        {
+            _running = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

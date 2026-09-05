@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/var/
+**/.vs/
+**/.idea/
+.git/
+.github/
+**/*.user
+**/appsettings.Local.json
+.env
+*.md
+!PLAN.md

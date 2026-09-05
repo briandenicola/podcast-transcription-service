@@ -1,0 +1,41 @@
+# The app runs here; whisper.cpp runs on the box that owns the GPU.
+#
+# Whisper__BaseUrl is the only setting that has to be right for transcription to work.
+# Point it at whisper-server wherever it lives — a Windows machine with the NVIDIA card,
+# another host, or a sidecar container. Copy .env.example to .env and set it there.
+#
+# Start whisper-server on the GPU box with something like:
+#   whisper-server.exe -m models/ggml-large-v3-turbo-q5_0.bin --host 0.0.0.0 --port 8080
+# and make sure its firewall lets this host reach that port.
+
+services:
+  transcriber:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: podcast-transcription:latest
+    container_name: podcast-transcriber
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+      # Where whisper-server is actually running.
+      Whisper__BaseUrl: "${WHISPER_BASE_URL:-http://host.docker.internal:8080}"
+      # Must match the model whisper-server was started with; recorded against each transcript.
+      Whisper__Model: "${WHISPER_MODEL:-large-v3-turbo-q5_0}"
+      Whisper__Language: "${WHISPER_LANGUAGE:-auto}"
+      # A long file is one long request. The 100 s HttpClient default would fail every episode.
+      Whisper__RequestTimeoutMinutes: "${WHISPER_TIMEOUT_MINUTES:-120}"
+
+      Storage__DataPath: /data
+      Storage__MediaPath: /media
+      Storage__MaxUploadMb: "${MAX_UPLOAD_MB:-2048}"
+    volumes:
+      - ./data:/data
+      - ./media:/media
+    # Lets Whisper__BaseUrl use host.docker.internal on Linux hosts, where it is not
+    # resolvable by default. Harmless if you point at a real hostname or IP instead.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

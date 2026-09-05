@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PodcastTranscription.Web/PodcastTranscription.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PodcastTranscription.Tests/PodcastTranscription.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,31 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Rider / VS / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/
+
+# Local runtime data (see StorageOptions: kept under var/ so a case-insensitive
+# filesystem cannot confuse it with the source folder Data/)
+var/
+*.db
+*.db-shm
+*.db-wal
+logs/
+*.log
+
+# Local overrides
+appsettings.Local.json
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
