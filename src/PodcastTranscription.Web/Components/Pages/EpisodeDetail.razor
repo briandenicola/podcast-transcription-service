@@ -5,9 +5,9 @@
 @using PodcastTranscription.Web.Services
 @implements IDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
-@inject TranscriptionService Transcription
+@inject JobQueue Queue
+@inject JobNotifier Notifier
 @inject WhisperClient Whisper
-@inject ILogger<EpisodeDetail> Log
 
 <PageTitle>@(_episode?.Title ?? "Episode")</PageTitle>
 
@@ -27,24 +27,57 @@ else
             </div>
         </div>
         <div class="text-end">
-            <button class="btn btn-primary" @onclick="Transcribe" disabled="@_running">
-                @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
-            </button>
-            @if (_running)
+            @if (_activeJob is null)
             {
-                <button class="btn btn-outline-secondary ms-2" @onclick="Cancel">Cancel</button>
+                <button class="btn btn-primary" @onclick="Enqueue">
+                    @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
+                </button>
+            }
+            else
+            {
+                <button class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
             }
         </div>
     </div>
 
-    @if (_status is not null)
+    @if (_activeJob is { } job)
     {
-        <div class="alert @(_failed ? "alert-danger" : "alert-info") d-flex align-items-center">
-            @if (_running)
-            {
-                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-            }
-            <span>@_status</span>
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>
+                        <span class="badge @JobDisplay.BadgeClass(job.State)">@job.State</span>
+                        @if (job.TotalChunks > 0)
+                        {
+                            <span class="ms-2 text-muted small">chunk @job.CompletedChunks of @job.TotalChunks</span>
+                        }
+                    </span>
+                    <span class="text-muted small font-monospace">
+                        @JobDisplay.Elapsed(job) elapsed · @JobDisplay.RealtimeFactor(job) realtime
+                    </span>
+                </div>
+                <div class="progress" style="height: 1.25rem;" role="progressbar"
+                     aria-valuenow="@((int)(job.Progress * 100))" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar @(JobDisplay.IsRunning(job.State) ? "progress-bar-striped progress-bar-animated" : "")"
+                         style="width: @((int)(job.Progress * 100))%;">
+                        @((int)(job.Progress * 100))%
+                    </div>
+                </div>
+                @if (job.State == JobState.Transcribing)
+                {
+                    <div class="small text-muted mt-2">
+                        Segments appear as each chunk lands — no need to wait for the whole episode.
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_lastFailure is { } failure)
+    {
+        <div class="alert alert-danger d-flex justify-content-between align-items-center">
+            <span><strong>@failure.State.</strong> @failure.LastError</span>
+            <button class="btn btn-sm btn-outline-danger" @onclick="() => Retry(failure.Id)">Retry</button>
         </div>
     }
 
@@ -60,7 +93,7 @@ else
                 @foreach (var t in _transcripts)
                 {
                     <li class="nav-item">
-                        <button class="nav-link @(t.Id == _selected?.Id ? "active" : "")" @onclick="() => Select(t)">
+                        <button class="nav-link @(t.Id == _selectedId ? "active" : "")" @onclick="() => _selectedId = t.Id">
                             @t.Model
                             <span class="small opacity-75">@t.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")</span>
                         </button>
@@ -69,20 +102,24 @@ else
             </ul>
         }
 
-        @if (_selected is not null)
+        @if (Selected is { } selected)
         {
             <div class="text-muted small mb-2">
-                @_selected.Segments.Count segments
-                · model @_selected.Model
-                · language @(_selected.Language ?? "unknown")
-                @if (_selected.RealtimeFactor is { } factor)
+                @selected.Segments.Count segments
+                · model @selected.Model
+                · language @(selected.Language ?? "unknown")
+                @if (selected.RealtimeFactor is { } factor)
                 {
                     <span> · @factor.ToString("N1")× realtime</span>
+                }
+                @if (!selected.IsComplete)
+                {
+                    <span class="badge bg-info text-dark ms-2">partial</span>
                 }
             </div>
 
             <div class="transcript">
-                @foreach (var segment in _selected.Segments)
+                @foreach (var segment in selected.Segments)
                 {
                     <div class="transcript-line">
                         <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
@@ -99,11 +136,19 @@ else
 
     private Episode? _episode;
     private List<Transcript> _transcripts = [];
-    private Transcript? _selected;
-    private string? _status;
-    private bool _running;
-    private bool _failed;
-    private CancellationTokenSource? _cts;
+    private int? _selectedId;
+    private Job? _activeJob;
+    private Job? _lastFailure;
+    private Timer? _ticker;
+
+    private Transcript? Selected => _transcripts.FirstOrDefault(t => t.Id == _selectedId) ?? _transcripts.FirstOrDefault();
+
+    protected override void OnInitialized()
+    {
+        Notifier.JobChanged += OnJobChanged;
+        _ticker = new Timer(_ => { if (_activeJob is not null) InvokeAsync(StateHasChanged); }, null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -123,52 +168,51 @@ else
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
-        _selected = _transcripts.FirstOrDefault();
+        _selectedId ??= _transcripts.FirstOrDefault()?.Id;
+
+        var jobs = await db.Jobs
+            .Where(j => j.EpisodeId == EpisodeId)
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(10)
+            .ToListAsync();
+
+        _activeJob = jobs.FirstOrDefault(j => JobDisplay.IsActive(j.State));
+        _lastFailure = _activeJob is null
+            ? jobs.FirstOrDefault(j => j.State is JobState.Failed or JobState.Cancelled)
+            : null;
     }
 
-    private void Select(Transcript transcript) => _selected = transcript;
-
-    private async Task Transcribe()
+    // The worker raises this from its own thread for every job; only this episode's matter.
+    private void OnJobChanged(int jobId) => InvokeAsync(async () =>
     {
-        _running = true;
-        _failed = false;
-        _status = "Starting…";
-        _cts = new CancellationTokenSource();
+        await LoadAsync();
+        StateHasChanged();
+    });
 
-        var progress = new Progress<string>(message =>
-        {
-            _status = message;
-            InvokeAsync(StateHasChanged);
-        });
+    private async Task Enqueue()
+    {
+        await Queue.EnqueueAsync(EpisodeId);
+        await LoadAsync();
+    }
 
-        try
+    private async Task Cancel()
+    {
+        if (_activeJob is { } job)
         {
-            await Transcription.TranscribeAsync(EpisodeId, progress, _cts.Token);
+            await Queue.CancelAsync(job.Id);
             await LoadAsync();
         }
-        catch (OperationCanceledException)
-        {
-            _status = "Cancelled.";
-        }
-        catch (Exception ex)
-        {
-            Log.LogError(ex, "Transcription failed for episode {EpisodeId}", EpisodeId);
-            _failed = true;
-            _status = $"Failed: {ex.Message}";
-        }
-        finally
-        {
-            _running = false;
-            _cts?.Dispose();
-            _cts = null;
-        }
     }
 
-    private void Cancel() => _cts?.Cancel();
+    private async Task Retry(int jobId)
+    {
+        await Queue.RetryAsync(jobId);
+        await LoadAsync();
+    }
 
     public void Dispose()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        Notifier.JobChanged -= OnJobChanged;
+        _ticker?.Dispose();
     }
 }

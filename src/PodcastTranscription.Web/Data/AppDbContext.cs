@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<Transcript> Transcripts => Set<Transcript>();
     public DbSet<Segment> Segments => Set<Segment>();
+    public DbSet<TranscriptChunk> TranscriptChunks => Set<TranscriptChunk>();
     public DbSet<Feed> Feeds => Set<Feed>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
@@ -36,6 +37,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(x => x.Jobs)
                 .HasForeignKey(x => x.EpisodeId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Losing the transcript must not take the job history with it.
+            e.HasOne(x => x.Transcript)
+                .WithMany()
+                .HasForeignKey(x => x.TranscriptId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Deliberately one-to-many: re-running an episode on a better model must not
@@ -54,6 +61,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.TranscriptId, x.Ordinal }).IsUnique();
             e.HasOne(x => x.Transcript)
                 .WithMany(x => x.Segments)
+                .HasForeignKey(x => x.TranscriptId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TranscriptChunk>(e =>
+        {
+            e.HasIndex(x => new { x.TranscriptId, x.Index }).IsUnique();
+            e.HasOne(x => x.Transcript)
+                .WithMany(x => x.Chunks)
                 .HasForeignKey(x => x.TranscriptId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

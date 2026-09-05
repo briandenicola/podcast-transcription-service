@@ -1,6 +1,7 @@
 @page "/upload"
 @using PodcastTranscription.Web.Services
 @inject EpisodeImporter Importer
+@inject JobQueue Queue
 @inject MediaStore Media
 @inject NavigationManager Navigation
 @inject ILogger<Upload> Log
@@ -61,9 +62,14 @@
             await using var stream = file.OpenReadStream(Media.MaxUploadBytes);
             var result = await Importer.ImportAsync(stream, file.Name, _title, _show);
 
+            if (!result.WasDuplicate)
+            {
+                await Queue.EnqueueAsync(result.Episode.Id);
+            }
+
             _status = result.WasDuplicate
                 ? "That audio is already in the library — opening the existing episode."
-                : "Imported.";
+                : "Imported and queued.";
             StateHasChanged();
 
             Navigation.NavigateTo($"/episodes/{result.Episode.Id}");

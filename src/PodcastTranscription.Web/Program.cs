@@ -22,6 +22,7 @@ builder.Host.UseSerilog((context, services, config) => config
 builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
+builder.Services.Configure<TranscriptionOptions>(builder.Configuration.GetSection(TranscriptionOptions.SectionName));
 
 var storage = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var dataDirectory = Path.IsPathRooted(storage.DataPath)
@@ -49,7 +50,15 @@ builder.Services.AddHttpClient<WhisperClient>(client =>
 builder.Services.AddScoped<MediaStore>();
 builder.Services.AddScoped<AudioProcessor>();
 builder.Services.AddScoped<EpisodeImporter>();
-builder.Services.AddScoped<TranscriptionService>();
+builder.Services.AddScoped<TranscriptionPipeline>();
+builder.Services.AddScoped<JobQueue>();
+
+// Shared across circuits and the worker, so both sides see the same running jobs and the same
+// stream of progress events.
+builder.Services.AddSingleton<RunningJobs>();
+builder.Services.AddSingleton<JobNotifier>();
+
+builder.Services.AddHostedService<TranscriptionWorker>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()

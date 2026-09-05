@@ -17,6 +17,27 @@ public class Job
     public int Attempts { get; set; }
     public string? LastError { get; set; }
 
+    /// <summary>Set when a failure is going to be retried; the worker ignores the job until then.</summary>
+    public DateTimeOffset? NextAttemptAt { get; set; }
+
+    /// <summary>The transcript being built. Set once work starts, so a resumed job appends to it.</summary>
+    public int? TranscriptId { get; set; }
+    public Transcript? Transcript { get; set; }
+
+    /// <summary>
+    /// The chunk boundaries, as JSON. Persisted rather than recomputed so a resumed job cuts the
+    /// audio in exactly the places the first attempt did.
+    /// </summary>
+    public string? ChunkPlanJson { get; set; }
+
+    public int TotalChunks { get; set; }
+
+    /// <summary>How many chunks have landed. Doubles as the resume point.</summary>
+    public int CompletedChunks { get; set; }
+
+    /// <summary>Audio seconds transcribed so far, for a realtime factor while the job is still running.</summary>
+    public double ProcessedAudioSec { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

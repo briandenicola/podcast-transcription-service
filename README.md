@@ -11,9 +11,31 @@ See [PLAN.md](PLAN.md) for the architecture and full backlog.
 
 ## Status
 
-**M1 — walking skeleton.** Upload an MP3, transcribe it, read the transcript in the browser.
-The transcribe call is synchronous and un-chunked; the job queue, silence-aware chunking,
-word timestamps, search and feed ingest are M2 onwards.
+**M2 — queue and realtime status.** Upload an episode and it is queued; a background worker
+chunks it, posts the chunks one at a time, and the browser watches segments arrive. Search,
+exports and feed ingest are M3 onwards.
+
+How a job runs:
+
+1. ffmpeg transcodes the source to 16 kHz mono WAV — the only format whisper-server reliably
+   accepts — and that WAV is kept for re-transcribes and, later, diarization.
+2. `silencedetect` finds the pauses, and the episode is cut into ~10-minute chunks at the
+   silence nearest each boundary, so words are not severed mid-syllable.
+3. Each chunk is posted on its own with `max_len=1` and `split_on_word=true`, which collapses
+   every segment down to a single word with its own timing. Each word is offset by its chunk's
+   start position, then the words are regrouped into readable segments on terminal punctuation,
+   a pause over 700 ms, or roughly 200 characters.
+4. Segments are persisted as each chunk lands, so a transcript is readable — and marked
+   partial — long before the episode finishes.
+
+That last point is the reason for chunking at all: whisper-server returns nothing until a whole
+request completes, so a 90-minute episode posted whole is one blocking call with no progress and
+nothing to show for it if the container stops.
+
+Restarting mid-episode is safe. Jobs left in a working state are re-queued on startup and resume
+from the last completed chunk against the stored chunk plan, so the cuts land in exactly the same
+places. Failures retry with exponential backoff up to the attempt cap, then surface the error on
+the jobs page with a Retry button.
 
 ## Configuration
 
@@ -32,6 +54,15 @@ and `.env`.
 | `Storage:MediaPath` | `var/media` | Source audio and prepared 16 kHz WAVs. `/media` in the container. |
 | `Storage:MaxUploadMb` | `2048` | Upload ceiling. |
 | `MediaTools:FfmpegPath` | `ffmpeg` | Also `FfprobePath`, `YtDlpPath`. Baked into the image. |
+| `Transcription:WorkerCount` | `1` | A second concurrent request to one whisper-server only queues inside it and makes the realtime numbers meaningless. Raise it when there are several backends. |
+| `Transcription:ChunkSeconds` | `600` | Target chunk length. Tune against the realtime factor the jobs page reports. |
+| `Transcription:SilenceSearchWindowSeconds` | `90` | How far from a boundary to look for a pause to cut on. |
+| `Transcription:SilenceNoiseDb` | `-30` | Anything quieter counts as silence. |
+| `Transcription:WordTimestamps` | `true` | Word timing is the one thing that is painful to retrofit. |
+| `Transcription:WordGapMs` | `700` | A longer pause starts a new display segment. |
+| `Transcription:MaxSegmentChars` | `200` | A segment is closed once it runs this long. |
+| `Transcription:MaxAttempts` | `3` | Then the job is left Failed with its error shown. |
+| `Transcription:RetryBaseSeconds` | `30` | First retry delay; doubles each attempt. |
 
 `GET /healthz` reports whether `whisper-server` is reachable; it answers 503 when it is not.
 
@@ -78,7 +109,9 @@ dotnet test
 src/PodcastTranscription.Web
   Domain/         Episode, Job, Transcript, Segment, Feed
   Data/           AppDbContext, migrations, startup bootstrap
-  Services/       WhisperClient, AudioProcessor, EpisodeImporter, TranscriptionService
+  Services/       WhisperClient, AudioProcessor, EpisodeImporter, JobQueue,
+                  TranscriptionPipeline, TranscriptionWorker
+  Services/Chunking/  Silence parsing and the chunk planner
   Components/     Blazor pages and layout
 tests/PodcastTranscription.Tests
 ```
@@ -94,6 +127,11 @@ the worker writes.
 - **Timestamps are stored as Unix milliseconds.** SQLite refuses to `ORDER BY` a
   `DateTimeOffset`, so a value converter maps them to sortable integers. The domain model
   still speaks `DateTimeOffset`.
+
+- **The raw whisper responses live on `TranscriptChunk`, not on `Transcript`.** Chunking means
+  there is no single response per episode. One raw body per posted chunk keeps the intent —
+  segments can be re-derived without re-running inference — and a job that dies halfway keeps
+  the raw output of the chunks that already succeeded.
 
 Runtime directories default to `var/data` and `var/media` rather than `data/` and `media/`,
 because macOS volumes are typically case-insensitive and `data/` would collide with the

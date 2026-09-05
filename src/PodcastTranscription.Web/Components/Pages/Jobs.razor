@@ -1,0 +1,136 @@
+@page "/jobs"
+@using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@implements IDisposable
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject JobQueue Queue
+@inject JobNotifier Notifier
+
+<PageTitle>Jobs</PageTitle>
+
+<h1 class="h3 mb-3">Jobs</h1>
+
+@if (_jobs is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (_jobs.Count == 0)
+{
+    <p class="text-muted">Nothing queued. <a href="/upload">Add an episode</a>.</p>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Episode</th>
+                <th>State</th>
+                <th style="width: 18rem;">Progress</th>
+                <th class="text-end">Elapsed</th>
+                <th class="text-end">Realtime</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var job in _jobs)
+            {
+                <tr>
+                    <td>
+                        <a href="/episodes/@job.EpisodeId">@(job.Episode?.Title ?? $"Episode {job.EpisodeId}")</a>
+                        @if (job.Attempts > 1)
+                        {
+                            <span class="badge bg-light text-dark ms-1">attempt @job.Attempts</span>
+                        }
+                        @if (job.LastError is not null)
+                        {
+                            <div class="small text-danger">@job.LastError</div>
+                        }
+                        @if (job.NextAttemptAt is { } next && job.State == JobState.Queued)
+                        {
+                            <div class="small text-muted">retrying at @next.ToLocalTime().ToString("HH:mm:ss")</div>
+                        }
+                    </td>
+                    <td><span class="badge @JobDisplay.BadgeClass(job.State)">@job.State</span></td>
+                    <td>
+                        <div class="progress" style="height: 1.25rem;" role="progressbar"
+                             aria-valuenow="@((int)(job.Progress * 100))" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar @(JobDisplay.IsRunning(job.State) ? "progress-bar-striped progress-bar-animated" : "")"
+                                 style="width: @((int)(job.Progress * 100))%;">
+                                @((int)(job.Progress * 100))%
+                            </div>
+                        </div>
+                        @if (job.TotalChunks > 0)
+                        {
+                            <div class="small text-muted">chunk @job.CompletedChunks of @job.TotalChunks</div>
+                        }
+                    </td>
+                    <td class="text-end font-monospace">@JobDisplay.Elapsed(job)</td>
+                    <td class="text-end font-monospace">@JobDisplay.RealtimeFactor(job)</td>
+                    <td class="text-end">
+                        @if (JobDisplay.IsActive(job.State))
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => Cancel(job.Id)">Cancel</button>
+                        }
+                        else if (job.State is JobState.Failed or JobState.Cancelled)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Retry(job.Id)">Retry</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Job>? _jobs;
+    private Timer? _ticker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Notifier.JobChanged += OnJobChanged;
+
+        // The worker pushes state changes, but elapsed time and the realtime factor keep moving
+        // between them, so the running rows need a clock of their own.
+        _ticker = new Timer(_ => InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _jobs = await db.Jobs
+            .Include(j => j.Episode)
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(100)
+            .ToListAsync();
+    }
+
+    private void OnJobChanged(int jobId) => InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task Cancel(int jobId)
+    {
+        await Queue.CancelAsync(jobId);
+        await LoadAsync();
+    }
+
+    private async Task Retry(int jobId)
+    {
+        await Queue.RetryAsync(jobId);
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        Notifier.JobChanged -= OnJobChanged;
+        _ticker?.Dispose();
+    }
+}

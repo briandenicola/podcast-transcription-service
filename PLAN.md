@@ -178,17 +178,17 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 ### M2 — Queue and realtime status
 > *Done when: queue five episodes, watch them progress live, restart the container mid-run and have it recover.*
 
-- [ ] **2.1** Job table + state machine; enqueue on upload
-- [ ] **2.2** `TranscriptionWorker : BackgroundService` — claim oldest queued job, honour configurable concurrency
-- [ ] **2.3** Silence-aware segmentation; per-segment POST with timestamp offsetting
-- [ ] **2.3a** Request word timestamps (`max_len=1`, `split_on_word=true`); offset every word by chunk start
-- [ ] **2.3b** Regroup words into display segments on punctuation / ~700 ms gap / ~200 chars; persist `WordsJson` + `AvgLogProb`
-- [ ] **2.4** Progress reporting per segment; persist partial segments as they complete
-- [ ] **2.5** SignalR/Blazor push of job state to any connected client
-- [ ] **2.6** Job list page: state, progress bar, elapsed, realtime-factor, cancel button
-- [ ] **2.7** Retry with exponential backoff; `Attempts` cap; `LastError` surfaced in UI
-- [ ] **2.8** Startup recovery — reset jobs orphaned in a running state
-- [ ] **2.9** Resume from last completed segment rather than restarting the episode
+- [x] **2.1** Job table + state machine; enqueue on upload
+- [x] **2.2** `TranscriptionWorker : BackgroundService` — claim oldest queued job, honour configurable concurrency
+- [x] **2.3** Silence-aware segmentation; per-segment POST with timestamp offsetting
+- [x] **2.3a** Request word timestamps (`max_len=1`, `split_on_word=true`); offset every word by chunk start
+- [x] **2.3b** Regroup words into display segments on punctuation / ~700 ms gap / ~200 chars; persist `WordsJson` + `AvgLogProb`
+- [x] **2.4** Progress reporting per segment; persist partial segments as they complete
+- [x] **2.5** SignalR/Blazor push of job state to any connected client
+- [x] **2.6** Job list page: state, progress bar, elapsed, realtime-factor, cancel button
+- [x] **2.7** Retry with exponential backoff; `Attempts` cap; `LastError` surfaced in UI
+- [x] **2.8** Startup recovery — reset jobs orphaned in a running state
+- [x] **2.9** Resume from last completed segment rather than restarting the episode
 
 ### M3 — Library and search
 > *Done when: search across the whole archive returns highlighted hits that jump to the right timestamp.*
@@ -247,6 +247,13 @@ Two corrections that surfaced while building M1:
   need `verbose_json`, which is what `WhisperClient` asks for.
 - SQLite will not `ORDER BY` a `DateTimeOffset`. A value converter stores them as Unix
   milliseconds; the domain model is unchanged.
+
+And one from M2:
+
+- **`RawJson` moved off `Transcript` onto a new `TranscriptChunk` row.** Chunking means there
+  is no single whisper response for an episode. Keeping one raw body per posted chunk preserves
+  the intent — segments can still be re-derived without re-running inference — and means a job
+  that dies halfway does not lose the raw output of the chunks that already succeeded.
 
 ---
 
