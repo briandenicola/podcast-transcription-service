@@ -213,14 +213,14 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 - [x] **4.6** Backfill: enqueue the last N episodes of a feed
 
 ### M5 — Polish
-- [ ] **5.1** Cookie auth, single admin, config-supplied credentials
-- [ ] **5.2** Inline segment editing with `IsEdited` flag
-- [ ] **5.3** Re-transcribe with a different model; side-by-side compare
-- [ ] **5.4** Settings page: models, worker count, retention, whisper endpoint health
-- [ ] **5.5** `/healthz` including whisper reachability
-- [ ] **5.6** Retention job for source audio
-- [ ] **5.7** `POST /api/episodes` with API-key auth
-- [ ] **5.8** Nightly SQLite backup (`VACUUM INTO`)
+- [x] **5.1** Cookie auth, single admin, config-supplied credentials
+- [x] **5.2** Inline segment editing with `IsEdited` flag
+- [x] **5.3** Re-transcribe with a different model; side-by-side compare
+- [x] **5.4** Settings page: models, worker count, retention, whisper endpoint health
+- [x] **5.5** `/healthz` including whisper reachability
+- [x] **5.6** Retention job for source audio
+- [x] **5.7** `POST /api/episodes` with API-key auth
+- [x] **5.8** Nightly SQLite backup (`VACUUM INTO`)
 
 ### Later
 - Speaker diarization and enrollment — deferred, designed in §7
@@ -244,6 +244,10 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 5. **Feed polling takes new episodes only.** Subscribing records the existing catalogue
    without queueing it — subscribing to a show with ten years of history should not enqueue ten
    years of audio. Backfill (4.6) is the deliberate way to pull history.
+
+6. **Authentication is on by default and fails closed.** The app refuses to start with auth
+   enabled and no password configured, rather than either locking the operator out or quietly
+   serving the library to anyone who can reach it.
 
 Two corrections that surfaced while building M1:
 

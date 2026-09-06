@@ -11,8 +11,56 @@ See [PLAN.md](PLAN.md) for the architecture and full backlog.
 
 ## Status
 
-**M4 — ingest.** Subscribe to a podcast feed and new episodes transcribe themselves. Auth, inline
-editing, retention and the submission API are M5.
+**M5 — complete.** All five milestones in [PLAN.md](PLAN.md) are done: upload or subscribe,
+transcribe on a queue that survives restarts, search the archive, play it back, correct it, and
+export it. Speaker diarization is deliberately out of scope — see §7 of the plan for the design
+that the word timestamps keep possible.
+
+### Authentication
+
+A single admin account, on by default. whisper-server has no authentication of its own and this
+app holds a media library, so the app **refuses to start** with auth enabled and no password
+configured — better than either locking you out or quietly serving the library to the network.
+
+Set `ADMIN_PASSWORD` to get going, then generate a PBKDF2 hash on the settings page and move it
+to `ADMIN_PASSWORD_HASH`, so the password itself is not readable in the environment. Everything
+is protected: pages, audio streaming and exports alike, via a fallback authorization policy
+rather than page-by-page opt-in. Only `/healthz`, the login page and static assets are open.
+
+### Submission API
+
+`POST /api/episodes` with an `X-API-Key` header, so cron jobs and other tools can feed it without
+the UI. Disabled entirely until `API_KEY` is set — an API with no key is not an API worth
+exposing.
+
+```bash
+curl -X POST http://localhost:8080/api/episodes \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/episode.mp3","show":"The Build Log"}'
+```
+
+`GET /api/episodes/{id}` returns the transcripts and the latest job, which is enough to poll for
+completion.
+
+### Corrections and comparison
+
+Whisper mangles proper nouns. The **Edit** toggle turns each line into a text box; a corrected
+segment is flagged and the FTS index follows it inside SQLite, so search reflects the fix
+immediately. Word timings are dropped on edit, since they no longer describe the text.
+
+Re-transcribing records the model against each transcript, so the back catalogue can be
+reprocessed when a better model ships. **Compare** puts two runs side by side.
+
+### Retention and backups
+
+A maintenance worker runs nightly. Retention is **off by default** — deleting the original is not
+reversible, and re-transcribing on a better model needs it. When enabled it only ever prunes
+source audio, only for episodes with a finished transcript past a grace period, and never when
+that would leave an episode with no audio at all. The prepared 16 kHz WAV is kept, so playback
+falls back to it and diarization stays possible.
+
+Backups use `VACUUM INTO`, which writes a consistent, compacted copy while the app keeps
+running — unlike copying the file, which can catch it mid-write.
 
 ### Feeds
 
@@ -117,11 +165,21 @@ and `.env`.
 | `Ingest:QueueExistingItemsOnSubscribe` | `false` | Leave off unless subscribing really should enqueue the whole back catalogue. |
 | `Ingest:MaxItemsPerPoll` | `50` | Cap on what one poll accepts from a single feed. |
 | `Ingest:DownloadTimeoutMinutes` | `60` | Gives up on a download that hangs. |
+| `Auth:Enabled` | `true` | Turn off only when something in front of the app already authenticates. |
+| `Auth:Username` | `admin` | |
+| `Auth:PasswordHash` | _(none)_ | Preferred. Generate it on the settings page. |
+| `Auth:Password` | _(none)_ | Plaintext fallback; the app logs a warning when it is used. |
+| `Auth:ApiKey` | _(none)_ | Unset leaves `POST /api/episodes` disabled rather than unauthenticated. |
+| `Maintenance:DeleteSourceAfterTranscription` | `false` | Prune source audio once an episode has a finished transcript. |
+| `Maintenance:DeleteSourceAfterDays` | `30` | Grace period before source audio is eligible. |
+| `Maintenance:BackupsToKeep` | `7` | Nightly `VACUUM INTO` backups retained. |
 
 `GET /media/episodes/{id}/audio` serves the source audio with range requests enabled, which is
 what lets the player seek without downloading the whole episode.
 
-`GET /healthz` reports whether `whisper-server` is reachable; it answers 503 when it is not.
+`GET /healthz` reports whether `whisper-server` and the database are reachable, and how many jobs
+are queued; it answers 503 when anything is down. It is deliberately anonymous — the container
+healthcheck and any external monitor cannot log in — and reports reachability, never configuration.
 
 ## Running with Docker
 
@@ -172,6 +230,8 @@ src/PodcastTranscription.Web
   Services/Search/    FTS5 query building, ranking and highlighting
   Services/Export/    SRT, VTT, TXT, JSON and Markdown rendering
   Services/Ingest/    yt-dlp downloads, RSS parsing, feed polling
+  Services/Security/  Password hashing and the single admin account
+  Services/Maintenance/ Retention and database backups
   Endpoints/      Audio streaming and transcript export
   Components/     Blazor pages and layout
 tests/PodcastTranscription.Tests
@@ -179,6 +239,13 @@ tests/PodcastTranscription.Tests
 
 Migrations are applied on startup, and SQLite is put into WAL mode so the UI can read while
 the worker writes.
+
+## CI
+
+`Quality` builds and tests on every push and pull request, and fails on high or critical NuGet
+advisories including transitive ones. `CodeQL` scans C# on push, on pull request, and weekly.
+`Build and Push to Docker Hub` needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository
+secrets before it will succeed.
 
 ## Two places the code departs from PLAN.md
 

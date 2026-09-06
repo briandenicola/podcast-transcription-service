@@ -26,7 +26,8 @@ public class JobQueue(
     /// follow — and fall back to the global configuration after that.
     /// </summary>
     public async Task<Job> EnqueueAsync(
-        int episodeId, string? language = null, string? prompt = null, CancellationToken ct = default)
+        int episodeId, string? language = null, string? prompt = null, string? model = null,
+        CancellationToken ct = default)
     {
         var feed = await db.Episodes
             .Where(e => e.Id == episodeId && e.FeedId != null)
@@ -37,7 +38,7 @@ public class JobQueue(
         {
             EpisodeId = episodeId,
             State = JobState.Queued,
-            Model = feed?.DefaultModel ?? whisper.Model,
+            Model = model ?? feed?.DefaultModel ?? whisper.Model,
             Language = language ?? feed?.DefaultLanguage,
             Prompt = prompt ?? feed?.DefaultPrompt
         };

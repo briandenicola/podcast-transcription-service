@@ -29,6 +29,17 @@ services:
       # A long file is one long request. The 100 s HttpClient default would fail every episode.
       Whisper__RequestTimeoutMinutes: "${WHISPER_TIMEOUT_MINUTES:-120}"
 
+      # The app refuses to start with auth enabled and no password configured.
+      Auth__Username: "${ADMIN_USERNAME:-admin}"
+      Auth__Password: "${ADMIN_PASSWORD:-}"
+      Auth__PasswordHash: "${ADMIN_PASSWORD_HASH:-}"
+      # Unset leaves POST /api/episodes disabled rather than unauthenticated.
+      Auth__ApiKey: "${API_KEY:-}"
+
+      Maintenance__DeleteSourceAfterTranscription: "${DELETE_SOURCE_AFTER_TRANSCRIPTION:-false}"
+      Maintenance__DeleteSourceAfterDays: "${DELETE_SOURCE_AFTER_DAYS:-30}"
+      Maintenance__BackupsToKeep: "${BACKUPS_TO_KEEP:-7}"
+
       Storage__DataPath: /data
       Storage__MediaPath: /media
       Storage__MaxUploadMb: "${MAX_UPLOAD_MB:-2048}"

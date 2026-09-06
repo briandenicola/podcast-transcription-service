@@ -1,0 +1,273 @@
+@page "/settings"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@using PodcastTranscription.Web.Configuration
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Maintenance
+@using PodcastTranscription.Web.Services.Security
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject WhisperClient Whisper
+@inject AdminAuthenticator Admin
+@inject MaintenanceService Maintenance
+@inject IOptions<TranscriptionOptions> Transcription
+@inject IOptions<IngestOptions> Ingest
+@inject IOptions<MaintenanceOptions> MaintenanceSettings
+@inject IOptions<StorageOptions> Storage
+
+<PageTitle>Settings</PageTitle>
+
+<h1 class="h3 mb-1">Settings</h1>
+<p class="text-muted small mb-4">
+    These come from <code>appsettings.json</code> and the environment, so they are shown rather
+    than edited — change them in <code>.env</code> or compose and restart. Per-show model,
+    language and prompt live on each <a href="/feeds">feed</a>.
+</p>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+                <span>whisper-server</span>
+                <span class="badge @(_whisperReachable ? "bg-success" : "bg-danger")">
+                    @(_whisperReachable ? "reachable" : "unreachable")
+                </span>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Endpoint</dt><dd class="col-7"><code>@Whisper.Endpoint</code></dd>
+                    <dt class="col-5">Model</dt><dd class="col-7">@Whisper.Model</dd>
+                    <dt class="col-5">Workers</dt><dd class="col-7">@Transcription.Value.WorkerCount</dd>
+                    <dt class="col-5">Chunk length</dt><dd class="col-7">@Transcription.Value.ChunkSeconds s</dd>
+                    <dt class="col-5">Word timestamps</dt><dd class="col-7">@(Transcription.Value.WordTimestamps ? "on" : "off")</dd>
+                    <dt class="col-5">Max attempts</dt><dd class="col-7">@Transcription.Value.MaxAttempts</dd>
+                </dl>
+                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="CheckWhisper" disabled="@_busy">
+                    Re-check
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold">Ingest</div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-6">Feed polling</dt>
+                    <dd class="col-6">@(Ingest.Value.PollFeeds ? $"every {Ingest.Value.PollIntervalMinutes} min" : "off")</dd>
+                    <dt class="col-6">Queue on subscribe</dt>
+                    <dd class="col-6">@(Ingest.Value.QueueExistingItemsOnSubscribe ? "yes" : "new episodes only")</dd>
+                    <dt class="col-6">Max items per poll</dt><dd class="col-6">@Ingest.Value.MaxItemsPerPoll</dd>
+                    <dt class="col-6">Submission API</dt>
+                    <dd class="col-6">@(Admin.ApiEnabled ? "enabled" : "disabled (no Auth:ApiKey)")</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header py-2 fw-semibold">Password hash generator</div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    Produces a PBKDF2 hash for <code>Auth__PasswordHash</code>, so the password
+                    itself never sits in a config file or an environment variable.
+                </p>
+                <div class="input-group">
+                    <input type="password" class="form-control" @bind="_passwordToHash"
+                           placeholder="New password" aria-label="Password to hash" />
+                    <button class="btn btn-outline-primary" @onclick="GenerateHash">Generate</button>
+                </div>
+                @if (_generatedHash is not null)
+                {
+                    <div class="mt-3">
+                        <label class="form-label small">Set this as <code>Auth__PasswordHash</code>, then restart:</label>
+                        <textarea class="form-control font-monospace" rows="3" readonly>@_generatedHash</textarea>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold">Storage</div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-6">Episodes</dt><dd class="col-6">@_episodeCount</dd>
+                    <dt class="col-6">Transcripts</dt><dd class="col-6">@_transcriptCount</dd>
+                    <dt class="col-6">Segments</dt><dd class="col-6">@_segmentCount.ToString("N0")</dd>
+                    <dt class="col-6">Source audio</dt><dd class="col-6">@TimeFormat.Size(_sourceBytes)</dd>
+                    <dt class="col-6">Prepared WAVs</dt><dd class="col-6">@TimeFormat.Size(_preparedBytes)</dd>
+                    <dt class="col-6">Media path</dt><dd class="col-6"><code>@Storage.Value.MediaPath</code></dd>
+                    <dt class="col-6">Data path</dt><dd class="col-6"><code>@Storage.Value.DataPath</code></dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold">Retention</div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-7">Delete source after transcription</dt>
+                    <dd class="col-5">@(MaintenanceSettings.Value.DeleteSourceAfterTranscription ? "yes" : "no")</dd>
+                    <dt class="col-7">Grace period</dt>
+                    <dd class="col-5">@MaintenanceSettings.Value.DeleteSourceAfterDays days</dd>
+                    <dt class="col-7">Keep prepared WAV</dt>
+                    <dd class="col-5">@(MaintenanceSettings.Value.KeepPreparedWav ? "yes" : "no")</dd>
+                    <dt class="col-7">Runs at</dt>
+                    <dd class="col-5">@MaintenanceSettings.Value.RunAt daily</dd>
+                </dl>
+                @if (!MaintenanceSettings.Value.DeleteSourceAfterTranscription)
+                {
+                    <p class="small text-muted mt-2 mb-0">
+                        Nothing is deleted. Set <code>Maintenance__DeleteSourceAfterTranscription=true</code>
+                        to prune source audio once an episode has a finished transcript.
+                    </p>
+                }
+                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="RunRetention" disabled="@_busy">
+                    Run retention now
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header py-2 fw-semibold">Backups</div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    <code>VACUUM INTO</code> writes a consistent, compacted copy while the app keeps
+                    running. Keeping @MaintenanceSettings.Value.BackupsToKeep.
+                </p>
+
+                @if (_backups.Count == 0)
+                {
+                    <p class="small text-muted mb-3">No backups yet.</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled small mb-3">
+                        @foreach (var backup in _backups.Take(7))
+                        {
+                            <li class="d-flex justify-content-between">
+                                <span class="font-monospace">@backup.Name</span>
+                                <span class="text-muted">@TimeFormat.Size(backup.Length)</span>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <button class="btn btn-sm btn-outline-secondary" @onclick="RunBackup" disabled="@_busy">
+                    Back up now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_message is not null)
+{
+    <div class="alert @(_failed ? "alert-danger" : "alert-success") mt-4">@_message</div>
+}
+
+@code {
+    private bool _whisperReachable;
+    private bool _busy;
+    private bool _failed;
+    private string? _message;
+
+    private int _episodeCount;
+    private int _transcriptCount;
+    private int _segmentCount;
+    private long _sourceBytes;
+    private long _preparedBytes;
+    private List<FileInfo> _backups = [];
+
+    private string? _passwordToHash;
+    private string? _generatedHash;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _episodeCount = await db.Episodes.CountAsync();
+        _transcriptCount = await db.Transcripts.CountAsync();
+        _segmentCount = await db.Segments.CountAsync();
+
+        (_sourceBytes, _preparedBytes) = Maintenance.MeasureMediaUsage();
+        _backups = Maintenance.ListBackups();
+        _whisperReachable = await Whisper.IsReachableAsync();
+    }
+
+    private async Task CheckWhisper()
+    {
+        _busy = true;
+        try
+        {
+            _whisperReachable = await Whisper.IsReachableAsync();
+            _failed = !_whisperReachable;
+            _message = _whisperReachable
+                ? $"{Whisper.Endpoint} answered."
+                : $"{Whisper.Endpoint} did not answer.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void GenerateHash()
+    {
+        if (string.IsNullOrWhiteSpace(_passwordToHash))
+        {
+            return;
+        }
+
+        _generatedHash = PasswordHasher.Hash(_passwordToHash);
+        _passwordToHash = null;
+    }
+
+    private async Task RunRetention()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Maintenance.PruneSourceAudioAsync();
+            _failed = false;
+            _message = result.EpisodesPruned == 0
+                ? "Nothing eligible to prune."
+                : $"Pruned {result.EpisodesPruned} source file(s), freeing {TimeFormat.Size(result.BytesFreed)}.";
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _failed = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RunBackup()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Maintenance.BackupDatabaseAsync();
+            _failed = false;
+            _message = $"Backed up to {Path.GetFileName(result.Path)} ({TimeFormat.Size(result.Bytes)}).";
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _failed = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

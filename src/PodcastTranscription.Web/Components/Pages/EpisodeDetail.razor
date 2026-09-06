@@ -9,6 +9,7 @@
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobQueue Queue
 @inject JobNotifier Notifier
+@inject WhisperClient Whisper
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -32,9 +33,15 @@ else
         <div class="text-end">
             @if (_activeJob is null)
             {
-                <button class="btn btn-primary" @onclick="Enqueue">
-                    @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
-                </button>
+                <div class="input-group">
+                    @* Recorded against the transcript, so the back catalogue can be reprocessed
+                       on a better model and the results compared. *@
+                    <input class="form-control form-control-sm" style="max-width: 14rem;"
+                           @bind="_modelOverride" placeholder="@Whisper.Model" aria-label="Model" />
+                    <button class="btn btn-primary btn-sm" @onclick="Enqueue">
+                        @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
+                    </button>
+                </div>
             }
             else
             {
@@ -131,6 +138,19 @@ else
 
                 <div class="d-flex align-items-center gap-3">
                     <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="edit-mode"
+                               checked="@_editing" @onchange="ToggleEditing" />
+                        <label class="form-check-label small" for="edit-mode">Edit</label>
+                    </div>
+                    @if (_transcripts.Count > 1)
+                    {
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="compare-mode"
+                                   checked="@_comparing" @onchange="ToggleCompare" />
+                            <label class="form-check-label small" for="compare-mode">Compare</label>
+                        </div>
+                    }
+                    <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="show-words"
                                checked="@_showWords" @onchange="ToggleWords" />
                         <label class="form-check-label small" for="show-words">Words</label>
@@ -165,10 +185,35 @@ else
                 </div>
             }
 
-            <TranscriptView Segments="selected.Segments"
-                            ShowWords="_showWords"
-                            ShadeConfidence="_shadeConfidence"
-                            Follow="_follow" />
+            @if (_comparing && CompareAgainst is { } other)
+            {
+                <div class="row g-3 compare">
+                    <div class="col-6">
+                        <div class="small text-muted mb-1">
+                            <strong>@selected.Model</strong>
+                            · @selected.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")
+                        </div>
+                        <TranscriptView Segments="selected.Segments" Follow="_follow" />
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted mb-1">
+                            <strong>@other.Model</strong>
+                            · @other.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")
+                        </div>
+                        @* Only the left column drives the player; two would fight over it. *@
+                        <TranscriptView Segments="other.Segments" Follow="false" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <TranscriptView Segments="selected.Segments"
+                                ShowWords="_showWords"
+                                ShadeConfidence="_shadeConfidence"
+                                Follow="_follow"
+                                Editable="_editing"
+                                SegmentEdited="SaveSegment" />
+            }
         }
     }
 }
@@ -194,7 +239,14 @@ else
     private bool _hasAudio;
     private bool _showWords;
     private bool _shadeConfidence;
+    private bool _editing;
+    private bool _comparing;
+    private string? _modelOverride;
     private readonly bool _follow = true;
+
+    /// <summary>The next most recent transcript, which is what a comparison is against.</summary>
+    private Transcript? CompareAgainst =>
+        _transcripts.FirstOrDefault(t => t.Id != Selected?.Id);
 
     // A ?t=ms deep link from search: seek there once the player is on the page.
     private int? _pendingSeekMs;
@@ -278,6 +330,48 @@ else
 
     private void ToggleWords(ChangeEventArgs e) => _showWords = e.Value is true;
 
+    private void ToggleEditing(ChangeEventArgs e)
+    {
+        _editing = e.Value is true;
+
+        // Editing replaces the lines with inputs, so word rendering and comparison get in the way.
+        if (_editing)
+        {
+            _showWords = false;
+            _shadeConfidence = false;
+            _comparing = false;
+        }
+    }
+
+    private void ToggleCompare(ChangeEventArgs e)
+    {
+        _comparing = e.Value is true;
+
+        if (_comparing)
+        {
+            _editing = false;
+        }
+    }
+
+    private async Task SaveSegment(Segment segment)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var stored = await db.Segments.FirstOrDefaultAsync(s => s.Id == segment.Id);
+        if (stored is null)
+        {
+            return;
+        }
+
+        stored.Text = segment.Text;
+        stored.IsEdited = true;
+        stored.WordsJson = segment.WordsJson;
+
+        // The FTS triggers pick this up inside SQLite, so search reflects the correction with
+        // nothing extra to remember here.
+        await db.SaveChangesAsync();
+    }
+
     private void ToggleShading(ChangeEventArgs e)
     {
         _shadeConfidence = e.Value is true;
@@ -297,7 +391,7 @@ else
 
     private async Task Enqueue()
     {
-        await Queue.EnqueueAsync(EpisodeId);
+        await Queue.EnqueueAsync(EpisodeId, model: string.IsNullOrWhiteSpace(_modelOverride) ? null : _modelOverride.Trim());
         await LoadAsync();
     }
 

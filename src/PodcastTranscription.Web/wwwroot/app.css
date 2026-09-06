@@ -131,3 +131,31 @@ h1:focus {
 .episode-player audio {
     width: 100%;
 }
+
+/* Login */
+.login-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: #f5f5f7;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 22rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 2rem;
+}
+
+.transcript-line.is-edited .transcript-time {
+    color: #6f42c1 !important;
+}
+
+.compare .transcript {
+    max-width: none;
+    font-size: 0.9rem;
+}

@@ -1,0 +1,118 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Endpoints
+@using PodcastTranscription.Web.Services.Security
+@attribute [AllowAnonymous]
+@* Signing in writes a cookie, which needs the HttpContext of a real request. Rendering this page
+   statically rather than over a circuit is what makes that possible. *@
+@attribute [ExcludeFromInteractiveRouting]
+@layout Layout.EmptyLayout
+@inject AdminAuthenticator Admin
+@inject NavigationManager Navigation
+@inject ILogger<Login> Log
+
+<PageTitle>Sign in</PageTitle>
+
+<div class="login-shell">
+    <div class="login-card">
+        <h1 class="h4 mb-1">Podcast Transcription</h1>
+        <p class="text-muted small mb-4">Sign in to continue.</p>
+
+        @if (!Admin.HasPassword)
+        {
+            <div class="alert alert-danger">
+                No password is configured. Set <code>Auth__Password</code> or
+                <code>Auth__PasswordHash</code> and restart.
+            </div>
+        }
+        else
+        {
+            <EditForm Model="Input" method="post" OnValidSubmit="SignIn" FormName="login">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label" for="username">Username</label>
+                    <InputText id="username" class="form-control" @bind-Value="Input.Username" autocomplete="username" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="password">Password</label>
+                    <InputText id="password" type="password" class="form-control" @bind-Value="Input.Password"
+                               autocomplete="current-password" />
+                </div>
+
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger py-2">@_error</div>
+                }
+
+                <button class="btn btn-primary w-100" type="submit">Sign in</button>
+            </EditForm>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private Credentials Input { get; set; } = new();
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private string? _error;
+
+    private async Task SignIn()
+    {
+        if (!Admin.ValidateCredentials(Input.Username, Input.Password))
+        {
+            // Deliberately vague: saying which half was wrong helps only an attacker.
+            _error = "That username and password did not match.";
+            Log.LogWarning("Failed sign-in attempt for {Username} from {Ip}",
+                Input.Username, HttpContext.Connection.RemoteIpAddress);
+            return;
+        }
+
+        await HttpContext.SignInAsync(
+            AdminAuthenticator.CookieScheme,
+            Admin.CreatePrincipal(),
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.Add(Admin.SessionLength)
+            });
+
+        Log.LogInformation("{Username} signed in", Admin.Username);
+        Navigation.NavigateTo(SafeReturnUrl(), forceLoad: true);
+    }
+
+    /// <summary>
+    /// Only ever redirects within this app. An unchecked returnUrl is an open redirect: a link
+    /// that logs you in and lands you on someone else's page.
+    /// </summary>
+    private string SafeReturnUrl()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return "/";
+        }
+
+        var candidate = Uri.UnescapeDataString(ReturnUrl);
+
+        if (Uri.IsWellFormedUriString(candidate, UriKind.Absolute)
+            || candidate.StartsWith("//", StringComparison.Ordinal)
+            || candidate.StartsWith("/\\", StringComparison.Ordinal))
+        {
+            return "/";
+        }
+
+        return candidate.StartsWith('/') ? candidate : "/" + candidate;
+    }
+
+    private sealed class Credentials
+    {
+        [Required] public string Username { get; set; } = string.Empty;
+        [Required] public string Password { get; set; } = string.Empty;
+    }
+}

@@ -5,7 +5,11 @@ using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Endpoints;
 using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Ingest;
+using PodcastTranscription.Web.Services.Maintenance;
 using PodcastTranscription.Web.Services.Search;
+using PodcastTranscription.Web.Services.Security;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
 using Serilog.Events;
 
@@ -27,6 +31,8 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(Stor
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.Configure<TranscriptionOptions>(builder.Configuration.GetSection(TranscriptionOptions.SectionName));
 builder.Services.Configure<IngestOptions>(builder.Configuration.GetSection(IngestOptions.SectionName));
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+builder.Services.Configure<MaintenanceOptions>(builder.Configuration.GetSection(MaintenanceOptions.SectionName));
 
 var storage = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var dataDirectory = Path.IsPathRooted(storage.DataPath)
@@ -51,6 +57,8 @@ builder.Services.AddHttpClient<WhisperClient>(client =>
     client.Timeout = TimeSpan.FromMinutes(whisper.RequestTimeoutMinutes);
 });
 
+builder.Services.AddSingleton<AdminAuthenticator>();
+
 builder.Services.AddScoped<MediaStore>();
 builder.Services.AddScoped<AudioProcessor>();
 builder.Services.AddScoped<EpisodeImporter>();
@@ -59,6 +67,7 @@ builder.Services.AddScoped<JobQueue>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<YtDlpClient>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddHttpClient(nameof(FeedService));
 
 // Shared across circuits and the worker, so both sides see the same running jobs and the same
@@ -68,6 +77,39 @@ builder.Services.AddSingleton<JobNotifier>();
 
 builder.Services.AddHostedService<TranscriptionWorker>();
 builder.Services.AddHostedService<FeedPoller>();
+builder.Services.AddHostedService<MaintenanceWorker>();
+
+var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+
+builder.Services
+    .AddAuthentication(AdminAuthenticator.CookieScheme)
+    .AddCookie(AdminAuthenticator.CookieScheme, options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/logout";
+        options.AccessDeniedPath = "/login";
+        options.ExpireTimeSpan = TimeSpan.FromDays(Math.Clamp(authOptions.SessionDays, 1, 365));
+        options.SlidingExpiration = true;
+        options.Cookie.Name = "podcast-transcription.auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+
+        // Works over plain HTTP on a LAN, and upgrades itself the moment the app is behind TLS.
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    });
+
+var authorization = builder.Services.AddAuthorizationBuilder();
+
+if (authOptions.Enabled)
+{
+    // A fallback policy protects every endpoint that does not opt out — pages, media streaming
+    // and exports alike. Opting in page by page would eventually miss one.
+    authorization.SetFallbackPolicy(new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
+}
+
+builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
@@ -79,6 +121,29 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+// Fail closed. Starting with authentication on but no way to satisfy it would either lock the
+// operator out or, worse, quietly leave the library open.
+{
+    var admin = app.Services.GetRequiredService<AdminAuthenticator>();
+
+    if (admin.Enabled && !admin.HasPassword)
+    {
+        app.Logger.LogCritical(
+            "Authentication is enabled but no password is configured. Set Auth__Password (or "
+            + "Auth__PasswordHash, which is preferred) and restart, or set Auth__Enabled=false if "
+            + "something in front of this app already authenticates.");
+
+        throw new InvalidOperationException(
+            "Auth is enabled but no password is configured. Set Auth__Password or Auth__PasswordHash.");
+    }
+
+    if (!admin.Enabled)
+    {
+        app.Logger.LogWarning(
+            "Authentication is DISABLED. Anyone who can reach this app can read and delete the library.");
+    }
+}
+
 await app.MigrateAsync();
 
 if (!app.Environment.IsDevelopment())
@@ -89,22 +154,22 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseSerilogRequestLogging();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+// CSS, JS and the favicon must load before anyone has signed in, or the login page arrives
+// unstyled and without the Blazor script. The fallback policy would otherwise cover these too.
+app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 
-app.MapGet("/healthz", async (WhisperClient client) =>
-{
-    var reachable = await client.IsReachableAsync();
-    return Results.Json(
-        new { status = reachable ? "healthy" : "degraded", whisper = new { endpoint = client.Endpoint, reachable } },
-        statusCode: reachable ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-});
+app.MapHealthEndpoints();
+app.MapAuthEndpoints();
+app.MapEpisodeApiEndpoints();
 
 app.Run();
 

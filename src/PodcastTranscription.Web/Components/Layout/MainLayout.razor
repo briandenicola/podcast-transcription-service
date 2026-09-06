@@ -1,4 +1,5 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
 
 <div class="page">
     <div class="sidebar">
@@ -6,8 +7,19 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        <div class="top-row px-4 d-flex justify-content-end align-items-center gap-3">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="text-muted small">@context.User.Identity?.Name</span>
+                    @* A form rather than a link: signing out changes state, so it must not be
+                       something a GET can trigger. *@
+                    <form method="post" action="/logout" class="m-0">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-link btn-sm p-0">Sign out</button>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+            <a href="/settings" class="small">Settings</a>
         </div>
 
         <article class="content px-4">
