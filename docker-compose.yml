@@ -49,7 +49,11 @@ services:
       # episode-sized. Raise both together: the window has to fit inside the context.
       Ollama__ContextTokens: "${OLLAMA_CONTEXT_TOKENS:-8192}"
       Ollama__MaxWindowChars: "${OLLAMA_WINDOW_CHARS:-12000}"
-      Ollama__MaxOutputTokens: "${OLLAMA_MAX_OUTPUT_TOKENS:-1200}"
+      Ollama__MaxOutputTokens: "${OLLAMA_MAX_OUTPUT_TOKENS:-2048}"
+      # Reasoning models (qwen3, deepseek-r1, gpt-oss) think before answering, and Ollama turns
+      # that ON by itself unless told otherwise — whereupon the model spends the whole output
+      # budget reasoning and returns an empty answer. Off here, which is safe on every model.
+      Ollama__Think: "${OLLAMA_THINK:-false}"
       Ollama__Temperature: "${OLLAMA_TEMPERATURE:-0.2}"
       # A long episode is several generate calls back to back; a CPU-only model is slow.
       Ollama__RequestTimeoutMinutes: "${OLLAMA_TIMEOUT_MINUTES:-30}"

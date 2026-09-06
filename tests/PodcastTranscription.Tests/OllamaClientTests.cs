@@ -98,8 +98,116 @@ public class OllamaClientTests
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """{"response":"   ","done":true}""");
 
-        await Assert.ThrowsAsync<OllamaException>(() => CreateClient(handler).GenerateAsync("s", "p"));
+        var ex = await Assert.ThrowsAsync<OllamaException>(
+            () => CreateClient(handler).GenerateAsync("s", "p"));
+
+        Assert.Equal("Ollama returned an empty completion.", ex.Message);
     }
+
+    // ------------------------------------------------------- reasoning models --
+
+    [Fact]
+    public async Task Thinking_is_switched_off_explicitly_because_ollama_turns_it_on_by_itself()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, GenerateResponse);
+
+        await CreateClient(handler).GenerateAsync("s", "p");
+
+        // Absent, Ollama defaults thinking to on for any model that supports it, and the model
+        // then spends its whole output budget reasoning and answers with nothing at all.
+        Assert.Contains("\"think\":false", handler.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task Thinking_can_be_turned_back_on()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, GenerateResponse);
+        var options = new OllamaOptions
+        {
+            Enabled = true,
+            BaseUrl = "http://ollama.test:11434",
+            Model = "qwen3:8b",
+            Think = true
+        };
+
+        await CreateClient(handler, options).GenerateAsync("s", "p");
+
+        Assert.Contains("\"think\":true", handler.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task Reasoning_returned_in_its_own_field_with_no_answer_names_the_cause()
+    {
+        // Exactly what qwen3 does when it runs out of budget mid-thought: HTTP 200, a full
+        // chain of thought, and nothing in response.
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """
+        {
+          "model": "qwen3:8b",
+          "response": "",
+          "thinking": "Okay, the user wants a summary. Let me read the transcript carefully...",
+          "done": true,
+          "eval_count": 2048
+        }
+        """);
+
+        var options = new OllamaOptions
+        {
+            Enabled = true,
+            BaseUrl = "http://ollama.test:11434",
+            Model = "qwen3:8b",
+            MaxOutputTokens = 2048
+        };
+
+        var ex = await Assert.ThrowsAsync<OllamaException>(
+            () => CreateClient(handler, options).GenerateAsync("s", "p"));
+
+        // "Empty completion" is the symptom; the message has to carry the remedy.
+        Assert.Contains("qwen3:8b", ex.Message);
+        Assert.Contains("reasoning and no answer", ex.Message);
+        Assert.Contains("MaxOutputTokens", ex.Message);
+    }
+
+    [Fact]
+    public async Task Reasoning_left_inline_in_the_answer_is_stripped_rather_than_summarised()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """
+        {
+          "response": "<think>Let me work through this.</think>\n## Overview\nThey argue about rates.",
+          "done": true
+        }
+        """);
+
+        var completion = await CreateClient(handler).GenerateAsync("s", "p");
+
+        Assert.Equal("## Overview\nThey argue about rates.", completion.Text);
+        Assert.DoesNotContain("think", completion.Text);
+    }
+
+    [Fact]
+    public async Task An_answer_that_is_only_an_unclosed_think_block_is_not_treated_as_a_summary()
+    {
+        // The budget ran out mid-thought, so the tag never closed. Without this the "summary"
+        // would be the model's reasoning about how to write one.
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """
+        {"response":"<think>First I should identify the speakers and then","done":true}
+        """);
+
+        var ex = await Assert.ThrowsAsync<OllamaException>(
+            () => CreateClient(handler).GenerateAsync("s", "p"));
+
+        Assert.Contains("reasoning and no answer", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("<think>reasoning</think>answer", "answer")]
+    [InlineData("<think>a</think>\n\n  answer  ", "answer")]
+    [InlineData("no tags here", "no tags here")]
+    [InlineData("<think>only reasoning</think>", "")]
+    [InlineData("<think>never closed", "")]
+    [InlineData("answer first<think>then reasoning", "answer first")]
+    [InlineData(null, "")]
+    public void StripThinking_keeps_only_the_answer(string? response, string expected) =>
+        Assert.Equal(expected, OllamaClient.StripThinking(response));
 
     [Fact]
     public async Task CheckHealthAsync_is_ready_when_the_configured_model_is_pulled()

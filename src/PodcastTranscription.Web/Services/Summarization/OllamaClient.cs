@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using PodcastTranscription.Web.Configuration;
 
@@ -12,7 +13,7 @@ namespace PodcastTranscription.Web.Services.Summarization;
 /// the server has, and <c>/api/generate</c> to ask it something. Streaming is deliberately off —
 /// nothing here renders tokens as they arrive, and a single response is far easier to retry.
 /// </summary>
-public class OllamaClient(HttpClient http, IOptions<OllamaOptions> options, ILogger<OllamaClient> log)
+public partial class OllamaClient(HttpClient http, IOptions<OllamaOptions> options, ILogger<OllamaClient> log)
 {
     private readonly OllamaOptions _options = options.Value;
 
@@ -36,6 +37,14 @@ public class OllamaClient(HttpClient http, IOptions<OllamaOptions> options, ILog
             prompt,
             system,
             stream = false,
+
+            // Sent explicitly, and false by default. Ollama turns thinking ON for any model that
+            // supports it when the field is absent, and a reasoning model then spends the whole
+            // num_predict budget inside <think> and returns an empty answer with a 200 — which
+            // looks exactly like a broken model. Sending false is safe on models that cannot
+            // think: Ollama only rejects the field when it is set to true without the capability.
+            think = _options.Think,
+
             options = new
             {
                 temperature = _options.Temperature,
@@ -65,16 +74,20 @@ public class OllamaClient(HttpClient http, IOptions<OllamaOptions> options, ILog
         var parsed = JsonSerializer.Deserialize<GenerateResponse>(raw, JsonOptions)
             ?? throw new OllamaException("Ollama returned a body that did not parse as JSON.");
 
-        if (string.IsNullOrWhiteSpace(parsed.Response))
+        // Some builds and templates leave the reasoning inline in the answer rather than in the
+        // separate thinking field, so it is stripped either way.
+        var text = StripThinking(parsed.Response);
+
+        if (string.IsNullOrWhiteSpace(text))
         {
-            throw new OllamaException("Ollama returned an empty completion.");
+            throw new OllamaException(EmptyCompletionMessage(parsed));
         }
 
         log.LogDebug("{Model} answered in {Elapsed} ({Tokens} tokens)",
             _options.Model, sw.Elapsed, parsed.EvalCount);
 
         return new OllamaCompletion(
-            parsed.Response.Trim(), parsed.PromptEvalCount, parsed.EvalCount, sw.ElapsedMilliseconds);
+            text, parsed.PromptEvalCount, parsed.EvalCount, sw.ElapsedMilliseconds);
     }
 
     /// <summary>
@@ -165,12 +178,64 @@ public class OllamaClient(HttpClient http, IOptions<OllamaOptions> options, ILog
         return names;
     }
 
+    /// <summary>
+    /// Names the cause rather than the symptom. "Empty completion" is what you see; the reason is
+    /// almost always that a reasoning model spent its entire output budget thinking, which looks
+    /// identical to a broken model unless the message says so.
+    /// </summary>
+    private string EmptyCompletionMessage(GenerateResponse parsed)
+    {
+        var thought = !string.IsNullOrWhiteSpace(parsed.Thinking)
+                   || ThinkBlock().IsMatch(parsed.Response ?? string.Empty)
+                   || (parsed.Response ?? string.Empty).Contains("<think>", StringComparison.OrdinalIgnoreCase);
+
+        if (!thought)
+        {
+            return "Ollama returned an empty completion.";
+        }
+
+        return _options.Think
+            ? $"{_options.Model} reasoned for its whole {_options.MaxOutputTokens}-token budget and "
+              + "never reached an answer. Set Ollama__Think=false (OLLAMA_THINK in .env), or raise "
+              + "Ollama__MaxOutputTokens well above the reasoning it needs."
+            : $"{_options.Model} returned reasoning and no answer, despite thinking being switched "
+              + $"off. Raise Ollama__MaxOutputTokens (currently {_options.MaxOutputTokens}), or "
+              + "summarise with a model that is not a reasoning model.";
+    }
+
+    /// <summary>Removes a &lt;think&gt; block, closed or left open by a truncated answer.</summary>
+    internal static string StripThinking(string? response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return string.Empty;
+        }
+
+        var stripped = ThinkBlock().Replace(response, string.Empty);
+
+        // An unclosed tag means the budget ran out mid-thought, so everything after it is
+        // reasoning too and there is no answer hiding behind it.
+        var unclosed = stripped.IndexOf("<think>", StringComparison.OrdinalIgnoreCase);
+        if (unclosed >= 0)
+        {
+            stripped = stripped[..unclosed];
+        }
+
+        return stripped.Trim();
+    }
+
+    [GeneratedRegex(@"<think>.*?</think>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex ThinkBlock();
+
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
 
     private sealed record GenerateResponse
     {
         public string? Response { get; init; }
+
+        /// <summary>A reasoning model's chain of thought, which Ollama returns separately.</summary>
+        public string? Thinking { get; init; }
 
         [JsonPropertyName("prompt_eval_count")]
         public int? PromptEvalCount { get; init; }
