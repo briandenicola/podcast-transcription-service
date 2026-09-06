@@ -139,6 +139,11 @@ The status bar's right-hand panel reports whether the browser could reach the Bl
 Interactive controls need one, and when it fails to connect the page still renders while buttons
 do nothing — indistinguishable from a bug unless something says so.
 
+Uploading shows a progress bar and an hourglass while the file transfers. That is progressive
+enhancement over the plain form post: a full episode is tens or hundreds of megabytes, and
+without it the browser sits on the form with no sign anything is happening — indistinguishable
+from a broken button. If the script does not run, the form still posts.
+
 Destructive and one-shot actions deliberately do not need that circuit. Uploading, subscribing to
 a feed and every delete are ordinary form posts, so they work even where the websocket does not.
 

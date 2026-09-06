@@ -103,7 +103,7 @@ else
     @if (_lastFailure is { } failure)
     {
         <div class="alert alert-danger d-flex justify-content-between align-items-center">
-            <span><strong>@failure.State.</strong> @failure.LastError</span>
+            <span class="job-error" title="@failure.LastError"><strong>@failure.State.</strong> @failure.LastError</span>
             <button class="btn btn-sm btn-outline-danger" @onclick="() => Retry(failure.Id)">Retry</button>
         </div>
     }

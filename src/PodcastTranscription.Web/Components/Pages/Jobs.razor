@@ -27,6 +27,7 @@ else if (_jobs.Count == 0)
 }
 else
 {
+    <div class="table-wrap">
     <table class="table align-middle">
         <thead>
             <tr>
@@ -50,7 +51,9 @@ else
                         }
                         @if (job.LastError is not null)
                         {
-                            <div class="small text-danger">@job.LastError</div>
+                            @* ffmpeg and whisper errors run to dozens of lines. Shown in full they
+                               swamp the row and squeeze every other column out of the table. *@
+                            <div class="job-error small text-danger" title="@job.LastError">@job.LastError</div>
                         }
                         @if (job.NextAttemptAt is { } next && job.State == JobState.Queued)
                         {
@@ -93,6 +96,7 @@ else
             }
         </tbody>
     </table>
+    </div>
 }
 
 @code {
