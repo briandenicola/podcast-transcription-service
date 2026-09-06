@@ -26,10 +26,27 @@ if [ "$(id -u)" = "0" ]; then
         owner="$(stat -c '%u:%g' "$dir" 2>/dev/null || echo '')"
         if [ "$owner" != "${PUID}:${PGID}" ]; then
             echo "entrypoint: taking ownership of $dir as ${PUID}:${PGID}"
-            chown -R "${PUID}:${PGID}" "$dir" 2>/dev/null \
-                || echo "entrypoint: warning: could not chown $dir; it may be read-only or a network mount"
+            chown -R "${PUID}:${PGID}" "$dir" 2>/dev/null || true
+        fi
+
+        # chown failing is not itself a problem — network mounts (NFS, SMB, a NAS share) often
+        # refuse it while still being perfectly writable by the uid they were mounted for. What
+        # actually matters is whether the app can write, so test that instead of guessing.
+        if gosu "${PUID}:${PGID}" sh -c "touch '$dir/.write-test' 2>/dev/null && rm -f '$dir/.write-test'"; then
+            :
+        else
+            echo "entrypoint: ERROR: $dir is not writable by ${PUID}:${PGID}."
+            echo "entrypoint:   It is owned by ${owner:-unknown}. Either chown it on the host:"
+            echo "entrypoint:       sudo chown -R ${PUID}:${PGID} <host path>"
+            echo "entrypoint:   or set PUID/PGID to the account that owns it (id -u / id -g)."
+            WRITE_FAILED=1
         fi
     done
+
+    if [ -n "${WRITE_FAILED:-}" ]; then
+        echo "entrypoint: refusing to start with an unwritable volume; fix the above and restart."
+        exit 1
+    fi
 
     exec gosu "${PUID}:${PGID}" "$@"
 fi

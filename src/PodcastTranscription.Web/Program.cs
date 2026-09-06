@@ -137,13 +137,19 @@ var app = builder.Build();
 
     if (admin.Enabled && !admin.HasPassword)
     {
+        // Names the compose variable as well as the raw setting: with Docker, ADMIN_PASSWORD in
+        // .env is what an operator actually edits, and Auth__Password is only how it arrives.
         app.Logger.LogCritical(
-            "Authentication is enabled but no password is configured. Set Auth__Password (or "
-            + "Auth__PasswordHash, which is preferred) and restart, or set Auth__Enabled=false if "
-            + "something in front of this app already authenticates.");
+            "Authentication is enabled but no password is configured.\n"
+            + "  Running with Docker: copy .env.example to .env and set ADMIN_PASSWORD, then "
+            + "`docker compose up -d`.\n"
+            + "  Running directly:    set Auth__Password, or Auth__PasswordHash which is preferred.\n"
+            + "  Already behind a proxy that authenticates? Set Auth__Enabled=false (AUTH_ENABLED=false "
+            + "in .env).");
 
         throw new InvalidOperationException(
-            "Auth is enabled but no password is configured. Set Auth__Password or Auth__PasswordHash.");
+            "Auth is enabled but no password is configured. Set ADMIN_PASSWORD in .env "
+            + "(or Auth__Password / Auth__PasswordHash directly).");
     }
 
     if (!admin.Enabled)

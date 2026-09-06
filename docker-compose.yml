@@ -30,6 +30,7 @@ services:
       Whisper__RequestTimeoutMinutes: "${WHISPER_TIMEOUT_MINUTES:-120}"
 
       # The app refuses to start with auth enabled and no password configured.
+      Auth__Enabled: "${AUTH_ENABLED:-true}"
       Auth__Username: "${ADMIN_USERNAME:-admin}"
       Auth__Password: "${ADMIN_PASSWORD:-}"
       Auth__PasswordHash: "${ADMIN_PASSWORD_HASH:-}"
