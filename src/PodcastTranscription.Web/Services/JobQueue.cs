@@ -20,15 +20,26 @@ public class JobQueue(
 {
     private readonly TranscriptionOptions _options = options.Value;
 
-    /// <summary>Queues an episode for transcription and returns the new job.</summary>
-    public async Task<Job> EnqueueAsync(int episodeId, string? language = null, CancellationToken ct = default)
+    /// <summary>
+    /// Queues an episode for transcription. Settings not given explicitly are inherited from the
+    /// episode's feed — podcasts are consistent, so a show is configured once and its episodes
+    /// follow — and fall back to the global configuration after that.
+    /// </summary>
+    public async Task<Job> EnqueueAsync(
+        int episodeId, string? language = null, string? prompt = null, CancellationToken ct = default)
     {
+        var feed = await db.Episodes
+            .Where(e => e.Id == episodeId && e.FeedId != null)
+            .Select(e => e.Feed)
+            .FirstOrDefaultAsync(ct);
+
         var job = new Job
         {
             EpisodeId = episodeId,
             State = JobState.Queued,
-            Model = whisper.Model,
-            Language = language
+            Model = feed?.DefaultModel ?? whisper.Model,
+            Language = language ?? feed?.DefaultLanguage,
+            Prompt = prompt ?? feed?.DefaultPrompt
         };
 
         db.Jobs.Add(job);

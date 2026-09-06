@@ -4,6 +4,7 @@ using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Endpoints;
 using PodcastTranscription.Web.Services;
+using PodcastTranscription.Web.Services.Ingest;
 using PodcastTranscription.Web.Services.Search;
 using Serilog;
 using Serilog.Events;
@@ -25,6 +26,7 @@ builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(Whis
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.Configure<TranscriptionOptions>(builder.Configuration.GetSection(TranscriptionOptions.SectionName));
+builder.Services.Configure<IngestOptions>(builder.Configuration.GetSection(IngestOptions.SectionName));
 
 var storage = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var dataDirectory = Path.IsPathRooted(storage.DataPath)
@@ -55,6 +57,9 @@ builder.Services.AddScoped<EpisodeImporter>();
 builder.Services.AddScoped<TranscriptionPipeline>();
 builder.Services.AddScoped<JobQueue>();
 builder.Services.AddScoped<SearchService>();
+builder.Services.AddScoped<YtDlpClient>();
+builder.Services.AddScoped<FeedService>();
+builder.Services.AddHttpClient(nameof(FeedService));
 
 // Shared across circuits and the worker, so both sides see the same running jobs and the same
 // stream of progress events.
@@ -62,6 +67,7 @@ builder.Services.AddSingleton<RunningJobs>();
 builder.Services.AddSingleton<JobNotifier>();
 
 builder.Services.AddHostedService<TranscriptionWorker>();
+builder.Services.AddHostedService<FeedPoller>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()

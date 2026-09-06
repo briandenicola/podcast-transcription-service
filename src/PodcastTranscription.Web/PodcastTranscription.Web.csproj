@@ -19,4 +19,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Parsing helpers for feeds and yt-dlp output are internal, but they are exactly the
+         fiddly bits worth testing directly. -->
+    <InternalsVisibleTo Include="PodcastTranscription.Tests" />
+  </ItemGroup>
+
 </Project>

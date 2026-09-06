@@ -11,6 +11,7 @@ using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Chunking;
+using PodcastTranscription.Web.Services.Ingest;
 
 namespace PodcastTranscription.Tests;
 
@@ -75,7 +76,8 @@ public class TranscriptionPipelineTests : IDisposable
     }
 
     private TranscriptionPipeline CreatePipeline(
-        AppDbContext db, HttpMessageHandler handler, AudioProcessor audio, TranscriptionOptions options)
+        AppDbContext db, HttpMessageHandler handler, AudioProcessor audio, TranscriptionOptions options,
+        YtDlpClient? downloader = null)
     {
         var whisperOptions = new WhisperOptions { BaseUrl = "http://whisper.test:8080", Model = "large-v3-turbo-q5_0" };
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://whisper.test:8080/") };
@@ -83,7 +85,12 @@ public class TranscriptionPipelineTests : IDisposable
         var media = new MediaStore(
             Options.Create(new StorageOptions { MediaPath = _mediaRoot }), new FakeHostEnvironment(_mediaRoot));
 
-        return new TranscriptionPipeline(db, media, audio, whisper, Options.Create(options),
+        var ytDlp = downloader ?? new YtDlpClient(
+            Options.Create(new MediaToolOptions()),
+            Options.Create(new IngestOptions()),
+            NullLogger<YtDlpClient>.Instance);
+
+        return new TranscriptionPipeline(db, media, audio, whisper, ytDlp, Options.Create(options),
             new JobNotifier(), NullLogger<TranscriptionPipeline>.Instance);
     }
 
@@ -333,6 +340,122 @@ public class TranscriptionPipelineTests : IDisposable
         await using var verify = new AppDbContext(_dbOptions);
         Assert.Equal(1, await verify.Segments.CountAsync());
         Assert.Equal(1, (await verify.Jobs.SingleAsync()).CompletedChunks);
+    }
+
+    [Fact]
+    public async Task An_episode_with_only_a_url_is_downloaded_before_it_is_prepared()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+
+        // How a feed item arrives: a URL, and nothing on disk yet.
+        var episode = new Episode
+        {
+            Title = "Fetching…",
+            SourceUrl = "https://example.com/audio/12.mp3",
+            AudioPath = string.Empty,
+            AudioSha256 = string.Empty
+        };
+        db.Episodes.Add(episode);
+        await db.SaveChangesAsync();
+
+        var job = new Job { EpisodeId = episode.Id, State = JobState.Queued, Model = "large-v3-turbo-q5_0" };
+        db.Jobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var downloader = new FakeYtDlpClient(title: "Ep. 12 — Pricing", durationSec: 300);
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Hello", 0, 30)));
+
+        await CreatePipeline(db, handler, new FakeAudioProcessor(300), Settings(), downloader)
+            .RunAsync(job.Id, CancellationToken.None);
+
+        Assert.Equal(["https://example.com/audio/12.mp3"], downloader.RequestedUrls);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        var stored = await verify.Episodes.SingleAsync();
+
+        Assert.NotEqual(string.Empty, stored.AudioPath);
+        Assert.Equal(64, stored.AudioSha256.Length);
+        Assert.Equal("Ep. 12 — Pricing", stored.Title);
+        Assert.Equal(JobState.Completed, (await verify.Jobs.SingleAsync()).State);
+    }
+
+    [Fact]
+    public async Task A_download_matching_audio_already_in_the_library_fails_without_retrying()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+
+        var content = new byte[] { 9, 8, 7, 6 };
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(content));
+
+        db.Episodes.Add(new Episode
+        {
+            Title = "Already here",
+            AudioPath = "source/original.mp3",
+            AudioSha256 = sha
+        });
+        await db.SaveChangesAsync();
+
+        var arriving = new Episode
+        {
+            Title = "Fetching…",
+            SourceUrl = "https://example.com/audio/same.mp3",
+            AudioPath = string.Empty,
+            AudioSha256 = string.Empty
+        };
+        db.Episodes.Add(arriving);
+        await db.SaveChangesAsync();
+
+        var job = new Job { EpisodeId = arriving.Id, State = JobState.Queued, Model = "large-v3-turbo-q5_0" };
+        db.Jobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var downloader = new FakeYtDlpClient(content);
+        var pipeline = CreatePipeline(db, new SequencedHttpMessageHandler(), new FakeAudioProcessor(300),
+            Settings(), downloader);
+
+        // Terminal: retrying would download the same bytes again to the same conclusion.
+        var ex = await Assert.ThrowsAsync<TerminalJobException>(() => pipeline.RunAsync(job.Id, CancellationToken.None));
+        Assert.Contains("Already here", ex.Message);
+
+        // The redundant copy is not left on disk.
+        Assert.False(Directory.Exists(Path.Combine(_mediaRoot, "source", $"episode-{arriving.Id}"))
+            && Directory.EnumerateFiles(Path.Combine(_mediaRoot, "source", $"episode-{arriving.Id}")).Any());
+    }
+
+    [Fact]
+    public async Task An_episode_with_neither_audio_nor_a_url_fails_terminally()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+
+        var episode = new Episode { Title = "Nothing to work with", AudioPath = string.Empty, AudioSha256 = string.Empty };
+        db.Episodes.Add(episode);
+        await db.SaveChangesAsync();
+
+        var job = new Job { EpisodeId = episode.Id, State = JobState.Queued, Model = "tiny" };
+        db.Jobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var pipeline = CreatePipeline(db, new SequencedHttpMessageHandler(), new FakeAudioProcessor(300), Settings());
+
+        await Assert.ThrowsAsync<TerminalJobException>(() => pipeline.RunAsync(job.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_jobs_prompt_and_language_are_sent_to_whisper()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (_, job) = await SeedAsync(db);
+
+        job.Language = "en";
+        job.Prompt = "Kara Swisher, EBITDA";
+        await db.SaveChangesAsync();
+
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Hello", 0, 30)));
+
+        await CreatePipeline(db, handler, new FakeAudioProcessor(300), Settings()).RunAsync(job.Id, CancellationToken.None);
+
+        Assert.Contains("Kara Swisher, EBITDA", handler.RequestBodies[0]);
+        Assert.Contains("name=language", handler.RequestBodies[0]);
     }
 
     /// <summary>Answers the first request, then cancels so the loop stops before the second.</summary>

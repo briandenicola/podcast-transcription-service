@@ -205,12 +205,12 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 ### M4 — Ingest
 > *Done when: subscribe to a feed and new episodes transcribe themselves overnight.*
 
-- [ ] **4.1** URL ingest via yt-dlp (single episode)
-- [ ] **4.2** RSS feed parsing and subscription management
-- [ ] **4.3** Scheduled poller for new episodes; `AutoTranscribe` per feed
-- [ ] **4.4** SHA-256 dedup on ingest
-- [ ] **4.5** Per-show defaults: model, language, custom prompt
-- [ ] **4.6** Backfill: enqueue the last N episodes of a feed
+- [x] **4.1** URL ingest via yt-dlp (single episode)
+- [x] **4.2** RSS feed parsing and subscription management
+- [x] **4.3** Scheduled poller for new episodes; `AutoTranscribe` per feed
+- [x] **4.4** SHA-256 dedup on ingest
+- [x] **4.5** Per-show defaults: model, language, custom prompt
+- [x] **4.6** Backfill: enqueue the last N episodes of a feed
 
 ### M5 — Polish
 - [ ] **5.1** Cookie auth, single admin, config-supplied credentials
@@ -240,6 +240,10 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 4. **Audio retention** — keep both the source file and the prepared 16 kHz WAV. Re-transcribes
    and the deferred diarization pass both read the WAV rather than decoding again. M5.6 can
    prune later if the library outgrows the disk.
+
+5. **Feed polling takes new episodes only.** Subscribing records the existing catalogue
+   without queueing it — subscribing to a show with ten years of history should not enqueue ten
+   years of audio. Backfill (4.6) is the deliberate way to pull history.
 
 Two corrections that surfaced while building M1:
 

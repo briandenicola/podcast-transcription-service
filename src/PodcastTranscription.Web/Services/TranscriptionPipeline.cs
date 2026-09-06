@@ -6,6 +6,7 @@ using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services.Chunking;
+using PodcastTranscription.Web.Services.Ingest;
 
 namespace PodcastTranscription.Web.Services;
 
@@ -23,6 +24,7 @@ public class TranscriptionPipeline(
     MediaStore media,
     AudioProcessor audio,
     WhisperClient whisper,
+    YtDlpClient ytDlp,
     IOptions<TranscriptionOptions> options,
     JobNotifier notifier,
     ILogger<TranscriptionPipeline> log)
@@ -39,6 +41,8 @@ public class TranscriptionPipeline(
 
         var wallClock = Stopwatch.StartNew();
         var audioSecondsThisRun = 0.0;
+
+        await EnsureSourceAudioAsync(job, episode, ct);
 
         await SetStateAsync(job, JobState.Preparing, ct);
         var wavRelative = await EnsurePreparedWavAsync(episode, ct);
@@ -73,9 +77,13 @@ public class TranscriptionPipeline(
             {
                 await audio.ExtractChunkAsync(wavPath, chunkPath, chunk.StartMs, chunk.EndMs, ct);
 
-                var request = _options.WordTimestamps
-                    ? new WhisperRequest { MaxLen = 1, SplitOnWord = true }
-                    : new WhisperRequest();
+                var request = new WhisperRequest
+                {
+                    Language = job.Language,
+                    Prompt = job.Prompt,
+                    MaxLen = _options.WordTimestamps ? 1 : null,
+                    SplitOnWord = _options.WordTimestamps
+                };
 
                 var (response, rawJson) = await whisper.TranscribeAsync(chunkPath, request, ct);
 
@@ -143,6 +151,72 @@ public class TranscriptionPipeline(
     }
 
     /// <summary>
+    /// Fetches the audio when the episode only has a URL — how feed items and URL ingest arrive.
+    /// Downloading inside the job rather than at ingest time means it queues, retries and reports
+    /// progress like everything else, instead of blocking whoever pasted the link.
+    /// </summary>
+    private async Task EnsureSourceAudioAsync(Job job, Episode episode, CancellationToken ct)
+    {
+        if (media.Exists(episode.AudioPath))
+        {
+            return;
+        }
+
+        // The prepared WAV is all transcription actually needs. Retention may prune source audio
+        // while keeping it, and re-transcribing then should not pull the episode down again.
+        if (media.Exists(episode.PreparedAudioPath))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(episode.SourceUrl))
+        {
+            throw new TerminalJobException(
+                $"Episode {episode.Id} has neither audio on disk nor a source URL to fetch it from.");
+        }
+
+        await SetStateAsync(job, JobState.Downloading, ct);
+
+        var downloadDirectory = media.Resolve(Path.Combine("source", $"episode-{episode.Id}"));
+        var download = await ytDlp.DownloadAudioAsync(episode.SourceUrl, downloadDirectory, ct);
+
+        var relative = Path.GetRelativePath(media.Root, download.FilePath);
+        var sha = await AudioProcessor.ComputeSha256Async(download.FilePath, ct);
+
+        // The same audio can arrive twice: a feed that reissues an item with a new guid, or a URL
+        // pasted after the file was already uploaded. Cheaper to notice now than to transcribe it
+        // a second time.
+        var duplicate = await db.Episodes
+            .Where(e => e.Id != episode.Id && e.AudioSha256 == sha)
+            .Select(e => new { e.Id, e.Title })
+            .FirstOrDefaultAsync(ct);
+
+        if (duplicate is not null)
+        {
+            // The bytes are identical to a copy already in the library, so this one is redundant.
+            TryDelete(download.FilePath);
+            throw new TerminalJobException(
+                $"Byte-identical to episode {duplicate.Id} ('{duplicate.Title}'), which is already in the library.");
+        }
+
+        episode.AudioPath = relative;
+        episode.AudioSha256 = sha;
+        episode.DurationSec ??= download.DurationSec;
+        episode.PublishedAt ??= download.PublishedAt;
+
+        // Feeds title an item better than yt-dlp does, so only replace the ingest placeholder.
+        if ((string.IsNullOrWhiteSpace(episode.Title) || episode.Title == Episode.PendingTitle)
+            && !string.IsNullOrWhiteSpace(download.Title))
+        {
+            episode.Title = download.Title!;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        log.LogInformation("Downloaded episode {EpisodeId} from {Url}", episode.Id, episode.SourceUrl);
+    }
+
+    /// <summary>
     /// Produces the 16 kHz mono WAV if it is missing. The prepared file is kept after success:
     /// re-transcription and, later, diarization both read it rather than decoding again.
     /// </summary>
@@ -162,7 +236,14 @@ public class TranscriptionPipeline(
         await audio.PrepareWavAsync(media.Resolve(episode.AudioPath), media.Resolve(relative), ct);
 
         episode.PreparedAudioPath = relative;
-        episode.DurationSec ??= await audio.ProbeDurationAsync(media.Resolve(relative), ct);
+
+        // ffprobe on the file we actually have beats whatever the feed or yt-dlp claimed; those
+        // are frequently rounded, and occasionally just wrong.
+        if (await audio.ProbeDurationAsync(media.Resolve(relative), ct) is { } probed and > 0)
+        {
+            episode.DurationSec = probed;
+        }
+
         await db.SaveChangesAsync(ct);
         return relative;
     }

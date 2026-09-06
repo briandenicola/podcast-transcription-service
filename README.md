@@ -11,9 +11,30 @@ See [PLAN.md](PLAN.md) for the architecture and full backlog.
 
 ## Status
 
-**M3 — library and search.** The archive is searchable, transcripts play back against the audio,
-and they export in five formats. Feed ingest is M4; auth, inline editing and the submission API
-are M5.
+**M4 — ingest.** Subscribe to a podcast feed and new episodes transcribe themselves. Auth, inline
+editing, retention and the submission API are M5.
+
+### Feeds
+
+A poller checks each subscribed feed on a timer and takes **new episodes only**. Subscribing
+records the existing catalogue without queueing it — subscribing to a show with ten years of
+history should not enqueue ten years of audio. **Backfill** on a feed is the deliberate way to
+pull history: it queues the most recent recorded episodes that have never been transcribed.
+
+Items are matched on the feed's own `<guid>`, falling back to the enclosure URL for feeds that
+omit one, so re-polling never re-adds an episode. Once audio is downloaded it is hashed, and a
+byte-identical match against something already in the library fails the job immediately rather
+than transcribing the same audio twice.
+
+Downloads happen inside the job rather than at ingest time, so they queue, retry and report
+progress like everything else instead of blocking whoever pasted the link.
+
+### Per-show defaults
+
+Model, language and prompt attach to a feed and are inherited by every episode it produces.
+The prompt is the cheapest accuracy win available — host and regular guest names plus recurring
+jargon cost nothing at inference time and stop whisper mangling them. The prompt used is recorded
+on each job, so two runs can be compared knowing what biased each.
 
 How a job runs:
 
@@ -91,6 +112,12 @@ and `.env`.
 | `Transcription:MaxAttempts` | `3` | Then the job is left Failed with its error shown. |
 | `Transcription:RetryBaseSeconds` | `30` | First retry delay; doubles each attempt. |
 
+| `Ingest:PollFeeds` | `true` | Set false to stop the poller; feeds can still be polled by hand. |
+| `Ingest:PollIntervalMinutes` | `60` | How often each feed is checked. |
+| `Ingest:QueueExistingItemsOnSubscribe` | `false` | Leave off unless subscribing really should enqueue the whole back catalogue. |
+| `Ingest:MaxItemsPerPoll` | `50` | Cap on what one poll accepts from a single feed. |
+| `Ingest:DownloadTimeoutMinutes` | `60` | Gives up on a download that hangs. |
+
 `GET /media/episodes/{id}/audio` serves the source audio with range requests enabled, which is
 what lets the player seek without downloading the whole episode.
 
@@ -144,6 +171,7 @@ src/PodcastTranscription.Web
   Services/Chunking/  Silence parsing and the chunk planner
   Services/Search/    FTS5 query building, ranking and highlighting
   Services/Export/    SRT, VTT, TXT, JSON and Markdown rendering
+  Services/Ingest/    yt-dlp downloads, RSS parsing, feed polling
   Endpoints/      Audio streaming and transcript export
   Components/     Blazor pages and layout
 tests/PodcastTranscription.Tests
@@ -165,6 +193,12 @@ the worker writes.
   there is no single response per episode. One raw body per posted chunk keeps the intent —
   segments can be re-derived without re-running inference — and a job that dies halfway keeps
   the raw output of the chunks that already succeeded.
+
+Feed XML is parsed with DTD processing prohibited and no external resolver. Feeds are fetched
+from wherever a user pointed us, so entity expansion and external entity attacks are closed off
+rather than trusted. Ingest URLs are restricted to http and https: arguments reach yt-dlp as an
+array rather than through a shell, so there is no command injection, but yt-dlp itself understands
+schemes like `file:` that would otherwise read the server's own disk.
 
 Runtime directories default to `var/data` and `var/media` rather than `data/` and `media/`,
 because macOS volumes are typically case-insensitive and `data/` would collide with the

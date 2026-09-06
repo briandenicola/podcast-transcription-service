@@ -11,6 +11,12 @@ public class Job
     public string Model { get; set; } = string.Empty;
     public string? Language { get; set; }
 
+    /// <summary>
+    /// The initial prompt handed to whisper, inherited from the feed unless overridden. Recorded
+    /// per job because it changes the output: comparing two runs means knowing what biased each.
+    /// </summary>
+    public string? Prompt { get; set; }
+
     /// <summary>0.0 to 1.0, updated as segments complete.</summary>
     public double Progress { get; set; }
 

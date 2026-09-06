@@ -1,0 +1,257 @@
+@page "/feeds/{FeedId:int}"
+@using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Configuration
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Ingest
+@using Microsoft.Extensions.Options
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject FeedService Feeds
+@inject IOptions<IngestOptions> IngestSettings
+@inject WhisperClient Whisper
+
+<PageTitle>@(_feed?.Title ?? "Feed")</PageTitle>
+
+@if (_feed is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h1 class="h3 mb-1">@_feed.Title</h1>
+            <div class="text-muted small text-break">@_feed.RssUrl</div>
+        </div>
+        <div class="text-end">
+            <button class="btn btn-outline-secondary" @onclick="PollNow" disabled="@_busy">Poll now</button>
+        </div>
+    </div>
+
+    @if (_message is not null)
+    {
+        <div class="alert @(_failed ? "alert-danger" : "alert-info") py-2">@_message</div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header py-2 fw-semibold">Per-show defaults</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Inherited by every episode this feed produces. The prompt is the cheapest
+                        accuracy win available — put the host and regular guest names in it, plus
+                        any jargon whisper keeps mangling.
+                    </p>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="auto-transcribe"
+                               @bind="_autoTranscribe" />
+                        <label class="form-check-label" for="auto-transcribe">
+                            Transcribe new episodes automatically
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="default-model">Model</label>
+                        <input id="default-model" class="form-control" @bind="_model"
+                               placeholder="@Whisper.Model" />
+                        <div class="form-text">Must match what whisper-server was started with.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="default-language">Language</label>
+                        <input id="default-language" class="form-control" @bind="_language" placeholder="auto" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="default-prompt">Prompt</label>
+                        <textarea id="default-prompt" class="form-control" rows="3" @bind="_prompt"
+                                  placeholder="Kara Swisher, Scott Galloway, Pivot, EBITDA"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" @onclick="SaveDefaults" disabled="@_busy">Save</button>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header py-2 fw-semibold">Backfill</div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Polling only takes new episodes. This queues the most recent recorded
+                        episodes that have never been transcribed.
+                    </p>
+                    <div class="input-group">
+                        <input type="number" min="1" max="500" class="form-control" @bind="_backfillCount" />
+                        <button class="btn btn-outline-primary" @onclick="Backfill" disabled="@_busy">
+                            Queue
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <h2 class="h5">Episodes <span class="text-muted fw-normal">(@_episodes.Count)</span></h2>
+            @if (_episodes.Count == 0)
+            {
+                <p class="text-muted">Nothing recorded from this feed yet.</p>
+            }
+            else
+            {
+                <div class="list-group">
+                    @foreach (var row in _episodes)
+                    {
+                        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                           href="/episodes/@row.Episode.Id">
+                            <span>
+                                @row.Episode.Title
+                                <div class="small text-muted">
+                                    @(row.Episode.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "no date")
+                                    · @TimeFormat.Duration(row.Episode.DurationSec)
+                                </div>
+                            </span>
+                            <span>
+                                @if (row.TranscriptCount > 0)
+                                {
+                                    <span class="badge bg-success">transcribed</span>
+                                }
+                                else if (row.LatestJobState is { } state)
+                                {
+                                    <span class="badge @JobDisplay.BadgeClass(state)">@state</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-dark">recorded</span>
+                                }
+                            </span>
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int FeedId { get; set; }
+
+    private record Row(Episode Episode, int TranscriptCount, JobState? LatestJobState);
+
+    private Feed? _feed;
+    private List<Row> _episodes = [];
+    private string? _message;
+    private bool _busy;
+    private bool _failed;
+
+    private bool _autoTranscribe;
+    private string? _model;
+    private string? _language;
+    private string? _prompt;
+    private int _backfillCount;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _backfillCount = IngestSettings.Value.DefaultBackfillCount;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == FeedId);
+        if (_feed is null)
+        {
+            return;
+        }
+
+        _autoTranscribe = _feed.AutoTranscribe;
+        _model = _feed.DefaultModel;
+        _language = _feed.DefaultLanguage;
+        _prompt = _feed.DefaultPrompt;
+
+        _episodes = await db.Episodes
+            .Where(e => e.FeedId == FeedId)
+            .OrderByDescending(e => e.PublishedAt ?? e.CreatedAt)
+            .Take(100)
+            .Select(e => new Row(
+                e,
+                e.Transcripts.Count(),
+                e.Jobs.OrderByDescending(j => j.CreatedAt).Select(j => (JobState?)j.State).FirstOrDefault()))
+            .ToListAsync();
+    }
+
+    private async Task SaveDefaults()
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == FeedId);
+            if (feed is null)
+            {
+                return;
+            }
+
+            feed.AutoTranscribe = _autoTranscribe;
+            feed.DefaultModel = Blank(_model);
+            feed.DefaultLanguage = Blank(_language);
+            feed.DefaultPrompt = Blank(_prompt);
+            await db.SaveChangesAsync();
+
+            _failed = false;
+            _message = "Saved. New jobs for this feed will inherit these.";
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PollNow()
+    {
+        _busy = true;
+        _message = "Polling…";
+
+        try
+        {
+            var outcome = await Feeds.PollAsync(FeedId);
+
+            _failed = outcome.Error is not null;
+            _message = outcome.Error
+                ?? (outcome.Discovered == 0
+                    ? "No new episodes."
+                    : $"Found {outcome.Discovered} new episode(s), queued {outcome.Queued}.");
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Backfill()
+    {
+        _busy = true;
+        try
+        {
+            var queued = await Feeds.BackfillAsync(FeedId, _backfillCount);
+            _failed = false;
+            _message = queued == 0
+                ? "Nothing to backfill — every recorded episode already has a transcript or a job."
+                : $"Queued {queued} episode(s).";
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(x => x.AudioSha256);
             e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => new { x.FeedId, x.FeedItemGuid });
             e.HasOne(x => x.Feed)
                 .WithMany(f => f.Episodes)
                 .HasForeignKey(x => x.FeedId)

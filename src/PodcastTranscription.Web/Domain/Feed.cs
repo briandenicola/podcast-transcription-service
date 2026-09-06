@@ -6,7 +6,12 @@ public class Feed
     public string Title { get; set; } = string.Empty;
     public string RssUrl { get; set; } = string.Empty;
     public DateTimeOffset? LastPolledAt { get; set; }
-    public bool AutoTranscribe { get; set; }
+
+    /// <summary>Why the last poll failed, or null when it succeeded. Shown on the feeds page.</summary>
+    public string? LastError { get; set; }
+
+    /// <summary>Queue new episodes as they appear, rather than only recording them.</summary>
+    public bool AutoTranscribe { get; set; } = true;
 
     // Per-show defaults, inherited by episodes (M4.5).
     public string? DefaultModel { get; set; }

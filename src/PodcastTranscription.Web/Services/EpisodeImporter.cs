@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
+using PodcastTranscription.Web.Services.Ingest;
 
 namespace PodcastTranscription.Web.Services;
 
@@ -13,6 +14,45 @@ public class EpisodeImporter(
     AudioProcessor audio,
     ILogger<EpisodeImporter> log)
 {
+    /// <summary>
+    /// Records an episode to be fetched from a URL. The download happens inside the job rather
+    /// than here, so it queues, retries and reports progress like everything else instead of
+    /// blocking whoever pasted the link.
+    /// </summary>
+    public async Task<Episode> ImportFromUrlAsync(
+        string url, string? title = null, string? show = null, CancellationToken ct = default)
+    {
+        if (!YtDlpClient.IsSupportedUrl(url))
+        {
+            throw new IngestException($"'{url}' is not an http or https URL.");
+        }
+
+        var normalized = url.Trim();
+
+        // A URL already in the library is the one dedup check available before downloading.
+        var existing = await db.Episodes.FirstOrDefaultAsync(e => e.SourceUrl == normalized, ct);
+        if (existing is not null)
+        {
+            log.LogInformation("URL {Url} is already episode {EpisodeId}", normalized, existing.Id);
+            return existing;
+        }
+
+        var episode = new Episode
+        {
+            Title = string.IsNullOrWhiteSpace(title) ? Episode.PendingTitle : title.Trim(),
+            Show = string.IsNullOrWhiteSpace(show) ? null : show.Trim(),
+            SourceUrl = normalized,
+            AudioPath = string.Empty,
+            AudioSha256 = string.Empty
+        };
+
+        db.Episodes.Add(episode);
+        await db.SaveChangesAsync(ct);
+
+        log.LogInformation("Recorded episode {EpisodeId} for {Url}", episode.Id, normalized);
+        return episode;
+    }
+
     public async Task<ImportResult> ImportAsync(
         Stream content,
         string fileName,

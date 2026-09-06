@@ -158,6 +158,20 @@ public class TranscriptionWorker(
 
         job.LastError = exception.Message;
 
+        // Some failures cannot be fixed by trying again — a duplicate download, an unusable URL.
+        // Burning the attempt budget on those just delays the error reaching the UI.
+        if (exception is TerminalJobException)
+        {
+            job.State = JobState.Failed;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+
+            await db.SaveChangesAsync(CancellationToken.None);
+            notifier.Notify(jobId);
+
+            log.LogWarning("Job {JobId} failed terminally: {Error}", jobId, exception.Message);
+            return;
+        }
+
         if (job.Attempts < _options.MaxAttempts)
         {
             var delay = queue.BackoffFor(job.Attempts);

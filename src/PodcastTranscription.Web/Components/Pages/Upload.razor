@@ -1,5 +1,6 @@
 @page "/upload"
 @using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Ingest
 @inject EpisodeImporter Importer
 @inject JobQueue Queue
 @inject MediaStore Media
@@ -12,9 +13,23 @@
 
 <div class="row">
     <div class="col-lg-7">
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <button class="nav-link @(_mode == Mode.File ? "active" : "")" @onclick="() => _mode = Mode.File">
+                    Upload a file
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(_mode == Mode.Url ? "active" : "")" @onclick="() => _mode = Mode.Url">
+                    From a URL
+                </button>
+            </li>
+        </ul>
+
         <div class="mb-3">
             <label class="form-label" for="title">Title <span class="text-muted">(optional)</span></label>
-            <input id="title" class="form-control" @bind="_title" placeholder="Defaults to the file name" disabled="@_busy" />
+            <input id="title" class="form-control" @bind="_title" disabled="@_busy"
+                   placeholder="@(_mode == Mode.File ? "Defaults to the file name" : "Defaults to what yt-dlp reports")" />
         </div>
 
         <div class="mb-3">
@@ -22,11 +37,29 @@
             <input id="show" class="form-control" @bind="_show" disabled="@_busy" />
         </div>
 
-        <div class="mb-3">
-            <label class="form-label" for="file">Audio file</label>
-            <InputFile id="file" class="form-control" OnChange="OnFileSelected" disabled="@_busy" />
-            <div class="form-text">Anything ffmpeg can decode. Up to @TimeFormat.Size(Media.MaxUploadBytes).</div>
-        </div>
+        @if (_mode == Mode.File)
+        {
+            <div class="mb-3">
+                <label class="form-label" for="file">Audio file</label>
+                <InputFile id="file" class="form-control" OnChange="OnFileSelected" disabled="@_busy" />
+                <div class="form-text">Anything ffmpeg can decode. Up to @TimeFormat.Size(Media.MaxUploadBytes).</div>
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <label class="form-label" for="url">Episode URL</label>
+                <div class="input-group">
+                    <input id="url" class="form-control" placeholder="https://example.com/episode.mp3"
+                           @bind="_url" disabled="@_busy" />
+                    <button class="btn btn-primary" @onclick="ImportUrl" disabled="@_busy">Fetch</button>
+                </div>
+                <div class="form-text">
+                    Downloaded with yt-dlp, so a direct audio link or a page it recognises both work.
+                    The download happens in the job queue — you do not have to wait here.
+                </div>
+            </div>
+        }
 
         @if (_status is not null)
         {
@@ -43,8 +76,12 @@
 </div>
 
 @code {
+    private enum Mode { File, Url }
+
+    private Mode _mode = Mode.File;
     private string? _title;
     private string? _show;
+    private string? _url;
     private string? _status;
     private bool _busy;
     private bool _failed;
@@ -79,6 +116,36 @@
             Log.LogError(ex, "Upload of {FileName} failed", file.Name);
             _failed = true;
             _status = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ImportUrl()
+    {
+        if (string.IsNullOrWhiteSpace(_url))
+        {
+            return;
+        }
+
+        _busy = true;
+        _failed = false;
+        _status = "Recording the episode…";
+
+        try
+        {
+            var episode = await Importer.ImportFromUrlAsync(_url, _title, _show);
+            await Queue.EnqueueAsync(episode.Id);
+
+            Navigation.NavigateTo($"/episodes/{episode.Id}");
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning(ex, "URL ingest of {Url} failed", _url);
+            _failed = true;
+            _status = ex.Message;
         }
         finally
         {
