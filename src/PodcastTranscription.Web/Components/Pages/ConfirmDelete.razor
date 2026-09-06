@@ -1,0 +1,167 @@
+@page "/delete/{Kind}/{Id:int}"
+@using Microsoft.AspNetCore.Components.Endpoints
+@using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Data
+@using PodcastTranscription.Web.Domain
+@* Static SSR, so the confirmation and the delete itself work with no circuit and no JavaScript.
+   A destructive action must not depend on a websocket having connected. *@
+@attribute [ExcludeFromInteractiveRouting]
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Confirm delete</PageTitle>
+
+<div class="confirm-dialog">
+    <div class="confirm-titlebar">
+        <span aria-hidden="true">⚠</span>
+        <span>Confirm delete</span>
+    </div>
+
+    <div class="confirm-body">
+        @if (_notFound)
+        {
+            <p>That item no longer exists.</p>
+            <a class="btn" href="@BackHref">Back</a>
+        }
+        else
+        {
+            <p class="confirm-question">@_question</p>
+
+            @if (_consequences.Count > 0)
+            {
+                <ul class="confirm-list">
+                    @foreach (var line in _consequences)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+            }
+
+            <div class="confirm-actions">
+                <form method="post" action="@PostAction" class="d-inline">
+                    <AntiforgeryToken />
+                    <button class="btn" type="submit">Delete</button>
+                </form>
+                <a class="btn" href="@BackHref">Cancel</a>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Kind { get; set; } = string.Empty;
+    [Parameter] public int Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "episodeId")] private int? EpisodeId { get; set; }
+
+    private bool _notFound;
+    private string _question = string.Empty;
+    private readonly List<string> _consequences = [];
+    private string _backHref = "/";
+    private string _postAction = "/";
+
+    private string BackHref => _backHref;
+    private string PostAction => _postAction;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _consequences.Clear();
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        switch (Kind.ToLowerInvariant())
+        {
+            case "episode":
+                await DescribeEpisodeAsync(db);
+                break;
+
+            case "transcript":
+                await DescribeTranscriptAsync(db);
+                break;
+
+            case "job":
+                await DescribeJobAsync(db);
+                break;
+
+            default:
+                _notFound = true;
+                break;
+        }
+    }
+
+    private async Task DescribeEpisodeAsync(AppDbContext db)
+    {
+        var episode = await db.Episodes
+            .Where(e => e.Id == Id)
+            .Select(e => new
+            {
+                e.Title,
+                Transcripts = e.Transcripts.Count(),
+                Jobs = e.Jobs.Count(),
+                Segments = e.Transcripts.SelectMany(t => t.Segments).Count(),
+                HasAudio = e.AudioPath != "" || e.PreparedAudioPath != null
+            })
+            .FirstOrDefaultAsync();
+
+        if (episode is null)
+        {
+            _notFound = true;
+            _backHref = "/";
+            return;
+        }
+
+        _question = $"Delete the episode “{episode.Title}”?";
+        _consequences.Add($"{episode.Transcripts} transcript(s) and {episode.Segments} segment(s)");
+        _consequences.Add($"{episode.Jobs} job(s) from the history");
+
+        if (episode.HasAudio)
+        {
+            _consequences.Add("The audio file, which cannot be recovered");
+        }
+
+        _backHref = $"/episodes/{Id}";
+        _postAction = $"/delete/episode/{Id}";
+    }
+
+    private async Task DescribeTranscriptAsync(AppDbContext db)
+    {
+        var transcript = await db.Transcripts
+            .Where(t => t.Id == Id)
+            .Select(t => new { t.Model, t.EpisodeId, t.CreatedAt, Segments = t.Segments.Count() })
+            .FirstOrDefaultAsync();
+
+        if (transcript is null)
+        {
+            _notFound = true;
+            _backHref = EpisodeId is { } fallback ? $"/episodes/{fallback}" : "/";
+            return;
+        }
+
+        _question = $"Delete the {transcript.Model} transcript from "
+                  + $"{transcript.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm}?";
+        _consequences.Add($"{transcript.Segments} segment(s), and this run's search results");
+        _consequences.Add("The episode and its audio are kept, so it can be transcribed again");
+
+        _backHref = $"/episodes/{transcript.EpisodeId}";
+        _postAction = $"/delete/transcript/{Id}?episodeId={transcript.EpisodeId}";
+    }
+
+    private async Task DescribeJobAsync(AppDbContext db)
+    {
+        var job = await db.Jobs
+            .Where(j => j.Id == Id)
+            .Select(j => new { j.State, Title = j.Episode!.Title })
+            .FirstOrDefaultAsync();
+
+        if (job is null)
+        {
+            _notFound = true;
+            _backHref = "/jobs";
+            return;
+        }
+
+        _question = $"Delete the {job.State} job for “{job.Title}”?";
+        _consequences.Add("Only the job history row. The transcript it produced is kept");
+
+        _backHref = "/jobs";
+        _postAction = $"/delete/job/{Id}";
+    }
+}

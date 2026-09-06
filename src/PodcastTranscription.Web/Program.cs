@@ -201,6 +201,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapUploadEndpoints();
+app.MapDeletionEndpoints();
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 

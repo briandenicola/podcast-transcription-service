@@ -6,23 +6,12 @@
 @using PodcastTranscription.Web.Services.Search
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject SearchService Search
-@inject DeletionService Deletion
-@inject WhisperClient Whisper
 
 <PageTitle>Library</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Library</h1>
     <a class="btn btn-primary" href="/upload">Add episode</a>
-</div>
-
-<div class="alert @WhisperAlertClass d-flex justify-content-between align-items-center py-2">
-    <span>
-        <strong>whisper-server</strong>
-        <code class="ms-1">@Whisper.Endpoint</code>
-        <span class="ms-2 text-muted">model @Whisper.Model</span>
-    </span>
-    <span>@WhisperStatusText</span>
 </div>
 
 <div class="row g-2 align-items-end mb-3">
@@ -62,9 +51,9 @@
     </div>
 </div>
 
-@if (_message is not null)
+@if (DeleteError is not null)
 {
-    <div class="alert alert-warning py-2">@_message</div>
+    <div class="alert alert-warning py-2">@DeleteError</div>
 }
 
 @if (_episodes is null)
@@ -121,11 +110,8 @@ else
                     </td>
                     <td class="text-end text-nowrap">
                         <a class="btn btn-sm btn-outline-secondary me-1" href="/episodes/@row.Episode.Id">Open</a>
-                        <ConfirmButton Text="Delete"
-                                       ConfirmText="Delete episode and audio"
-                                       Title="Delete this episode, its transcripts and its audio"
-                                       ConfirmTitle="Removes the audio too — this cannot be undone"
-                                       OnConfirmed="() => DeleteEpisode(row.Episode.Id)" />
+                        <a class="btn btn-sm" href="/delete/episode/@row.Episode.Id"
+                           title="Delete this episode, its transcripts and its audio">Delete</a>
                     </td>
                 </tr>
             }
@@ -159,25 +145,11 @@ else
 
     private record Row(Episode Episode, int TranscriptCount, JobState? LatestJobState);
 
+    /// <summary>A refusal handed back by the delete endpoint, e.g. a job still running.</summary>
+    [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
+
     private List<Row>? _episodes;
     private List<string> _shows = [];
-    private WhisperHealth? _whisperHealth;
-    private string? _message;
-
-    private string WhisperAlertClass => _whisperHealth switch
-    {
-        { Ready: true } => "alert-success",
-        { ModelLoading: true } => "alert-info",
-        _ => "alert-warning"
-    };
-
-    private string WhisperStatusText => _whisperHealth switch
-    {
-        { Ready: true } => "reachable",
-        { ModelLoading: true } => "loading model — the queue is waiting",
-        _ => "unreachable"
-    };
-
     private string? _titleFilter;
     private string _showFilter = string.Empty;
     private string _stateFilter = string.Empty;
@@ -190,14 +162,6 @@ else
     protected override async Task OnInitializedAsync()
     {
         _shows = await Search.GetShowsAsync();
-        _whisperHealth = await Whisper.CheckHealthAsync();
-        await LoadAsync();
-    }
-
-    private async Task DeleteEpisode(int episodeId)
-    {
-        var result = await Deletion.DeleteEpisodeAsync(episodeId);
-        _message = result.Refusal;
         await LoadAsync();
     }
 

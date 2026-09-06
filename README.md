@@ -128,6 +128,20 @@ the page looks fine and the button does nothing. A plain multipart POST is faste
 and works with no JavaScript running at all. `Storage:MaxUploadMb` raises both the Kestrel and
 form-parser body limits to match.
 
+### Interface
+
+The UI is themed as Windows 95 — beveled surfaces, a title bar, a status bar and a taskbar. It is
+layered over Bootstrap rather than replacing it, so Bootstrap still handles the grid and spacing
+and every page's markup is unchanged. The whole look comes from four greys: a raised edge is
+light on the top-left and dark on the bottom-right, and a sunken one is that inverted.
+
+The status bar's right-hand panel reports whether the browser could reach the Blazor circuit.
+Interactive controls need one, and when it fails to connect the page still renders while buttons
+do nothing — indistinguishable from a bug unless something says so.
+
+Destructive and one-shot actions deliberately do not need that circuit. Uploading, subscribing to
+a feed and every delete are ordinary form posts, so they work even where the websocket does not.
+
 ### Deleting things
 
 Three levels, because they mean different things. Deleting a **job** removes only its history
@@ -135,8 +149,11 @@ row, leaving the transcript it produced. Deleting a **transcript** throws away o
 episode and its audio stay, so it can be transcribed again. Deleting an **episode** removes the
 transcripts, the job history and the audio, and cannot be undone.
 
-Every delete asks once before acting, and anything with a job still running is refused with a
-note to cancel it first rather than deleting rows out from under the worker.
+Every delete goes through a confirmation page that spells out what will go — how many
+transcripts, how many segments, whether the audio is included. That page is statically rendered
+and the delete itself is a form post, so a destructive action never depends on a websocket having
+connected. Anything with a job still running is refused with a note to cancel it first, rather
+than deleting rows out from under the worker.
 
 Segments are always removed with an explicit statement rather than left to a foreign-key
 cascade: the search index is kept in step by a trigger on that table, and whether SQLite fires

@@ -1,31 +1,62 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
-
-    <main>
-        <div class="top-row px-4 d-flex justify-content-end align-items-center gap-3">
-            <AuthorizeView>
-                <Authorized>
-                    <span class="text-muted small">@context.User.Identity?.Name</span>
-                    @* A form rather than a link: signing out changes state, so it must not be
-                       something a GET can trigger. *@
-                    <form method="post" action="/logout" class="m-0">
-                        <AntiforgeryToken />
-                        <button type="submit" class="btn btn-link btn-sm p-0">Sign out</button>
-                    </form>
-                </Authorized>
-            </AuthorizeView>
-            <a href="/settings" class="small">Settings</a>
+<div class="desktop">
+    <div class="window">
+        <div class="title-bar">
+            <span class="title-bar-icon" aria-hidden="true">🎙</span>
+            <span class="title-bar-text">Podcast Transcription</span>
+            @* Decorative only — there is no window manager behind them. *@
+            <span class="title-bar-controls" aria-hidden="true">
+                <span>_</span><span>□</span><span>✕</span>
+            </span>
         </div>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+        <div class="window-body">
+            <div class="sidebar">
+                <NavMenu />
+            </div>
+
+            <main>
+                <div class="top-row">
+                    <AuthorizeView>
+                        <Authorized>
+                            <span>@context.User.Identity?.Name</span>
+                            @* A form rather than a link: signing out changes state, so a GET
+                               should not be able to trigger it. *@
+                            <form method="post" action="/logout" class="m-0">
+                                <AntiforgeryToken />
+                                <button type="submit" class="btn btn-sm">Sign out</button>
+                            </form>
+                        </Authorized>
+                    </AuthorizeView>
+                    <a href="/settings" class="btn btn-sm">Settings</a>
+                </div>
+
+                <article class="content">
+                    @Body
+                </article>
+            </main>
+        </div>
+
+        @* Status, not configuration — the whisper endpoint and model live on the settings page. *@
+        <div class="status-bar">
+            <span class="status-bar-field">Ready</span>
+            <span class="status-bar-field" id="w95-connection">Connecting…</span>
+        </div>
+    </div>
+
+    <div class="taskbar">
+        <a class="start-button" href="/">
+            <span class="start-flag" aria-hidden="true"></span>
+            Start
+        </a>
+        <span class="taskbar-spacer"></span>
+        <span class="taskbar-tray">
+            <span aria-hidden="true">🔊</span>
+            <span id="w95-clock">--:--</span>
+        </span>
+    </div>
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>

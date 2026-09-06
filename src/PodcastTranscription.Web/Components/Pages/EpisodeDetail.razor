@@ -35,11 +35,8 @@ else
             @if (_activeJob is null)
             {
                 <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
-                    <ConfirmButton Text="Delete episode"
-                                   ConfirmText="Delete episode and audio"
-                                   Title="Delete this episode, its transcripts and its audio"
-                                   ConfirmTitle="Removes the audio too — this cannot be undone"
-                                   OnConfirmed="DeleteEpisode" />
+                    <a class="btn btn-sm" href="/delete/episode/@EpisodeId"
+                       title="Delete this episode, its transcripts and its audio">Delete episode</a>
                 </div>
                 <div class="input-group">
                     @* Recorded against the transcript, so the back catalogue can be reprocessed
@@ -179,11 +176,8 @@ else
                     </div>
 
                     @* Throws away one run without touching the audio, so it can be transcribed again. *@
-                    <ConfirmButton Text="Delete transcript"
-                                   ConfirmText="Delete this transcript"
-                                   Title="Delete this transcript, keeping the episode and its audio"
-                                   ConfirmTitle="The episode and its audio are kept"
-                                   OnConfirmed="() => DeleteTranscript(selected.Id)" />
+                    <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
+                       title="Delete this transcript, keeping the episode and its audio">Delete transcript</a>
 
                     @* Plain links rather than a dropdown: a dropdown needs Bootstrap's JavaScript,
                        which this app does not load, so the button did nothing at all. *@
