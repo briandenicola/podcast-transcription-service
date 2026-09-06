@@ -544,11 +544,24 @@ textarea:focus {
 
 .transcript-time {
     flex: 0 0 5.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
     font-family: var(--w95-mono);
     font-size: var(--w95-mono-size);
     text-align: right;
     user-select: none;
     color: #000080;
+}
+
+button.transcript-time {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+button.transcript-time:focus-visible {
+    outline: 1px dotted currentColor;
+    outline-offset: 2px;
 }
 
 .transcript-text {
@@ -920,3 +933,6 @@ body.is-busy * { cursor: progress !important; }
     max-width: 34rem;
     cursor: help;
 }
+
+/* Only the installed Metro presentation uses the summary/transcript Pivot links. */
+.reader-pivot { display: none; }

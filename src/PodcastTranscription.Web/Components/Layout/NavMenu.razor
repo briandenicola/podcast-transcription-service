@@ -3,28 +3,36 @@
 
 <div class="nav-header">Podcast Transcription</div>
 
-<nav class="nav">
+<nav class="nav desktop-nav">
     <div class="nav-item">
         <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-            <span class="nav-icon" aria-hidden="true">📚</span> Library
+            <span class="nav-icon" aria-hidden="true">📚</span>
+            <span class="metro-icon" aria-hidden="true">▦</span>
+            <span class="nav-label">Library</span>
         </NavLink>
     </div>
 
     <div class="nav-item">
         <NavLink class="nav-link" href="search">
-            <span class="nav-icon" aria-hidden="true">🔍</span> Search
+            <span class="nav-icon" aria-hidden="true">🔍</span>
+            <span class="metro-icon" aria-hidden="true">⌕</span>
+            <span class="nav-label">Search</span>
         </NavLink>
     </div>
 
     <div class="nav-item">
         <NavLink class="nav-link" href="jobs">
-            <span class="nav-icon" aria-hidden="true">⏳</span> Jobs
+            <span class="nav-icon" aria-hidden="true">⏳</span>
+            <span class="metro-icon" aria-hidden="true">◷</span>
+            <span class="nav-label">Jobs</span>
         </NavLink>
     </div>
 
     <div class="nav-item">
         <NavLink class="nav-link" href="feeds">
-            <span class="nav-icon" aria-hidden="true">📡</span> Feeds
+            <span class="nav-icon" aria-hidden="true">📡</span>
+            <span class="metro-icon" aria-hidden="true">◉</span>
+            <span class="nav-label">Feeds</span>
         </NavLink>
     </div>
 
@@ -33,7 +41,9 @@
     <AuthorizeView Policy="@Roles.MemberPolicy">
         <div class="nav-item">
             <NavLink class="nav-link" href="upload">
-                <span class="nav-icon" aria-hidden="true">➕</span> Add episode
+                <span class="nav-icon" aria-hidden="true">➕</span>
+                <span class="metro-icon" aria-hidden="true">＋</span>
+                <span class="nav-label">Add</span>
             </NavLink>
         </div>
     </AuthorizeView>
@@ -41,8 +51,51 @@
     <AuthorizeView Policy="@Roles.AdminPolicy">
         <div class="nav-item">
             <NavLink class="nav-link" href="users">
-                <span class="nav-icon" aria-hidden="true">👥</span> Users
+                <span class="nav-icon" aria-hidden="true">👥</span>
+                <span class="metro-icon" aria-hidden="true">♟</span>
+                <span class="nav-label">Users</span>
             </NavLink>
         </div>
     </AuthorizeView>
+</nav>
+
+@* WP7 reserves the application bar for no more than four common actions. Less frequent
+   destinations live behind the ellipsis instead of shrinking every target to fit. *@
+<nav class="nav metro-nav" aria-label="Application bar">
+    <div class="nav-item">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            <span class="metro-icon" aria-hidden="true">▦</span>
+            <span class="nav-label">Library</span>
+        </NavLink>
+    </div>
+
+    <div class="nav-item">
+        <NavLink class="nav-link" href="search">
+            <span class="metro-icon" aria-hidden="true">⌕</span>
+            <span class="nav-label">Search</span>
+        </NavLink>
+    </div>
+
+    <AuthorizeView Policy="@Roles.MemberPolicy">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="upload">
+                <span class="metro-icon" aria-hidden="true">＋</span>
+                <span class="nav-label">Add</span>
+            </NavLink>
+        </div>
+    </AuthorizeView>
+
+    <details class="nav-item metro-overflow">
+        <summary class="nav-link">
+            <span class="metro-icon" aria-hidden="true">•••</span>
+            <span class="nav-label">More</span>
+        </summary>
+        <div class="metro-menu">
+            <NavLink href="jobs">jobs</NavLink>
+            <NavLink href="feeds">feeds</NavLink>
+            <AuthorizeView Policy="@Roles.AdminPolicy">
+                <NavLink href="users">users</NavLink>
+            </AuthorizeView>
+        </div>
+    </details>
 </nav>

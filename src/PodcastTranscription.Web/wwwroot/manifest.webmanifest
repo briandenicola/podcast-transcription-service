@@ -1,0 +1,42 @@
+{
+  "name": "Podcast Transcription",
+  "short_name": "Transcripts",
+  "description": "Search, read, and manage your self-hosted podcast transcripts.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search transcripts",
+      "short_name": "Search",
+      "url": "./search"
+    },
+    {
+      "name": "Add an episode",
+      "short_name": "Add",
+      "url": "./upload"
+    },
+    {
+      "name": "View jobs",
+      "short_name": "Jobs",
+      "url": "./jobs"
+    }
+  ]
+}

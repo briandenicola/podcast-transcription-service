@@ -43,3 +43,108 @@
     text-align: center;
     margin-right: var(--w95-gap-sm);
 }
+
+::deep .metro-icon { display: none; }
+.metro-nav { display: none; }
+
+@media (display-mode: standalone) {
+    .nav-header { display: none; }
+    .desktop-nav { display: none; }
+
+    .metro-nav {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 0;
+        justify-content: space-around;
+        min-width: 100%;
+    }
+
+    .nav-item {
+        flex: 0 0 68px;
+        padding: 0;
+    }
+
+    ::deep .nav-link {
+        display: flex;
+        min-height: 68px;
+        padding: 7px 3px 5px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 3px;
+        color: #fff;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 10px;
+        font-weight: 400;
+        line-height: 1;
+        text-transform: lowercase;
+    }
+
+    ::deep .nav-link:hover,
+    ::deep .nav-link.active {
+        background: transparent;
+        color: #fff;
+    }
+
+    ::deep .nav-link.active .metro-icon {
+        background: #1ba1e2;
+        border-color: #1ba1e2;
+    }
+
+    ::deep .nav-link .nav-icon { display: none; }
+
+    ::deep .nav-link .metro-icon {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        margin: 0;
+        place-items: center;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        font-family: "Segoe UI Symbol", "Segoe UI", sans-serif;
+        font-size: 21px;
+        font-weight: 300;
+        line-height: 1;
+    }
+
+    .metro-overflow > summary {
+        list-style: none;
+        cursor: pointer;
+    }
+
+    .metro-overflow > summary::-webkit-details-marker { display: none; }
+
+    .metro-overflow[open] > summary .metro-icon {
+        background: #1ba1e2;
+        border-color: #1ba1e2;
+    }
+
+    .metro-menu {
+        position: fixed;
+        z-index: 1001;
+        right: 0;
+        bottom: calc(78px + env(safe-area-inset-bottom));
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 8px 20px 14px;
+        border-top: 1px solid #333;
+        background: #111;
+        box-shadow: 0 -12px 28px rgba(0, 0, 0, .55);
+    }
+
+    ::deep .metro-menu a {
+        min-height: 48px;
+        padding: 11px 4px;
+        border-bottom: 1px solid #333;
+        color: #fff;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 20px;
+        font-weight: 300;
+        text-decoration: none;
+        text-transform: lowercase;
+    }
+
+    ::deep .metro-menu a.active { color: #1ba1e2; }
+}

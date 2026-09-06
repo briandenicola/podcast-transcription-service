@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+    <title>Podcast Transcription is offline</title>
+    <style>
+        html { background: #000; color: #fff; font-family: "Segoe UI", Arial, sans-serif; }
+        body { margin: 0; padding: max(48px, env(safe-area-inset-top)) 24px 40px; }
+        main { max-width: 38rem; margin: 0 auto; }
+        .app { color: #a7a7a7; font-size: 14px; font-weight: 600; text-transform: lowercase; }
+        h1 { margin: 8px 0 24px; font-size: clamp(44px, 14vw, 68px); font-weight: 300; line-height: .95; }
+        p { max-width: 30rem; font-size: 19px; line-height: 1.45; }
+        button {
+            min-height: 48px;
+            margin-top: 16px;
+            padding: 8px 18px;
+            border: 2px solid #fff;
+            background: #000;
+            color: #fff;
+            font: 16px "Segoe UI", Arial, sans-serif;
+        }
+        button:active { border-color: #1ba1e2; background: #1ba1e2; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="app">podcast transcription</div>
+        <h1>you're offline</h1>
+        <p>This library lives on your server, so it needs a network connection. Reconnect, then try again.</p>
+        <button type="button" onclick="location.reload()">try again</button>
+    </main>
+</body>
+</html>

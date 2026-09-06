@@ -105,28 +105,28 @@ window.podcastPlayer = (() => {
         seekAndPlay(Number(target.dataset.t0));
     };
 
-    // One delegated listener rather than thousands: any element carrying a start time seeks to it.
-    let onClick = null;
-
-    // The same, for the [hh:mm:ss] the summary cites. It sits outside the transcript, so it
-    // needs its own listener — but pressing one should do exactly what clicking a line does.
-    let onCueClick = null;
-
-    const onCueKey = (event) => {
+    const keyHandlerFor = (root) => (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
 
         const target = event.target.closest('[data-t0]');
-        if (!target || !cues.contains(target)) {
+        if (!target || !root.contains(target)) {
             return;
         }
 
-        // The cues are anchors without an href, so the browser gives them no keyboard
-        // activation of their own.
         event.preventDefault();
         seekAndPlay(Number(target.dataset.t0));
     };
+
+    // One delegated listener rather than thousands: any element carrying a start time seeks to it.
+    let onClick = null;
+    let onKey = null;
+
+    // The same, for the [hh:mm:ss] the summary cites. It sits outside the transcript, so it
+    // needs its own listener — but pressing one should do exactly what clicking a line does.
+    let onCueClick = null;
+    let onCueKey = null;
 
     return {
         init(audioId, containerId, cueContainerId) {
@@ -148,14 +148,17 @@ window.podcastPlayer = (() => {
             activeWord = null;
 
             onClick = clickHandlerFor(container);
+            onKey = keyHandlerFor(container);
 
             audio.addEventListener('timeupdate', onTimeUpdate);
             container.addEventListener('click', onClick);
+            container.addEventListener('keydown', onKey);
 
             // Optional: the summary card is only on the page once there is a summary.
             cues = cueContainerId ? document.getElementById(cueContainerId) : null;
             if (cues) {
                 onCueClick = clickHandlerFor(cues);
+                onCueKey = keyHandlerFor(cues);
                 cues.addEventListener('click', onCueClick);
                 cues.addEventListener('keydown', onCueKey);
             }
@@ -179,6 +182,7 @@ window.podcastPlayer = (() => {
 
             if (container && onClick) {
                 container.removeEventListener('click', onClick);
+                container.removeEventListener('keydown', onKey);
             }
 
             if (cues && onCueClick) {
@@ -190,7 +194,9 @@ window.podcastPlayer = (() => {
             container = null;
             cues = null;
             onClick = null;
+            onKey = null;
             onCueClick = null;
+            onCueKey = null;
             segments = [];
             words = [];
             activeSegment = null;

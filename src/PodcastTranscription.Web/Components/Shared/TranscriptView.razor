@@ -13,7 +13,18 @@
              data-segment="@(Editable ? null : "")"
              data-t0="@(Editable ? null : segment.StartMs.ToString())"
              data-t1="@(Editable ? null : segment.EndMs.ToString())">
-            <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
+            @if (Editable)
+            {
+                <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
+            }
+            else
+            {
+                <button type="button" class="transcript-time font-monospace text-muted"
+                        data-t0="@segment.StartMs" data-t1="@segment.EndMs"
+                        aria-label="Play from @TimeFormat.Clock(segment.StartMs)">
+                    @TimeFormat.Clock(segment.StartMs)
+                </button>
+            }
 
             @if (Editable)
             {

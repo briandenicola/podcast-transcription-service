@@ -191,6 +191,17 @@ rest), including in the scoped stylesheets for the layout and nav, which read th
 cascade. Rescaling the whole app is a matter of editing those values rather than hunting pixel
 figures through five files.
 
+When installed as a Progressive Web App, the same markup switches to a Windows Phone 7-inspired
+Metro presentation: a black content canvas, Segoe typography, oversized page titles, cyan accent,
+Pivot-style tabs and a touch-sized application bar. The switch uses the browser's
+`display-mode: standalone` media query, so opening the site in a normal desktop browser keeps the
+Windows 95 interface unchanged.
+
+The web app manifest offers shortcuts for search, upload and jobs. A service worker caches only
+the public icon and offline shell; it deliberately does not cache authenticated pages, transcript
+data or media. The app depends on its Blazor Server connection, so an offline launch explains that
+a connection is required instead of showing stale private data.
+
 ### Nothing needs the websocket
 
 Blazor Server runs interactive controls over a websocket. Where that websocket does not connect —

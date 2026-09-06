@@ -27,7 +27,7 @@
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-start mb-3">
+    <div class="episode-heading d-flex justify-content-between align-items-start mb-3">
         <div>
             <h1 class="h3 mb-1">@_episode.Title</h1>
             <div class="text-muted small">
@@ -159,7 +159,7 @@ else
 
         @if (Selected is { } selected)
         {
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div class="reader-tools d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <div class="text-muted small">
                     @selected.Segments.Count segments
                     · model @selected.Model
@@ -227,6 +227,11 @@ else
                 through red — the quickest way to find a mangled name. <strong>Correct text</strong>
                 turns every line into a box you can fix, and search picks the correction up.
             </div>
+
+            <nav class="reader-pivot" aria-label="Episode reader">
+                <a href="#summary-card">summary</a>
+                <a href="#transcript-body">transcript</a>
+            </nav>
 
             <SummaryCard Summary="selected.Summary"
                          EpisodeId="EpisodeId"
