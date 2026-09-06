@@ -15,16 +15,25 @@ using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, services, config) => config
-    .ReadFrom.Configuration(context.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File(
-        Path.Combine(ResolveLogDirectory(context.Configuration, context.HostingEnvironment), "app-.log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 14,
-        restrictedToMinimumLevel: LogEventLevel.Information));
+builder.Host.UseSerilog((context, services, config) =>
+{
+    config
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.Console();
+
+    // Null when the directory could not be created — an unwritable data volume, most likely.
+    // The console sink carries on alone rather than the app dying before it can report why.
+    if (ResolveLogDirectory(context.Configuration, context.HostingEnvironment) is { } logDirectory)
+    {
+        config.WriteTo.File(
+            Path.Combine(logDirectory, "app-.log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 14,
+            restrictedToMinimumLevel: LogEventLevel.Information);
+    }
+});
 
 builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
@@ -173,11 +182,24 @@ app.MapEpisodeApiEndpoints();
 
 app.Run();
 
-static string ResolveLogDirectory(IConfiguration configuration, IHostEnvironment environment)
+// Returns null when the log directory cannot be created, in which case file logging is skipped
+// and the console sink carries on alone. A permissions problem on the data volume is a real
+// failure, but it should surface as a clear database error rather than as a logging stack trace
+// thrown before the logger even exists.
+static string? ResolveLogDirectory(IConfiguration configuration, IHostEnvironment environment)
 {
     var configured = configuration[$"{StorageOptions.SectionName}:DataPath"] ?? "var/data";
     var root = Path.IsPathRooted(configured) ? configured : Path.Combine(environment.ContentRootPath, configured);
     var logs = Path.Combine(root, "logs");
-    Directory.CreateDirectory(logs);
-    return logs;
+
+    try
+    {
+        Directory.CreateDirectory(logs);
+        return logs;
+    }
+    catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+    {
+        Console.Error.WriteLine($"Could not create the log directory '{logs}': {ex.Message}. Logging to console only.");
+        return null;
+    }
 }

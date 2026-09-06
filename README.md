@@ -191,6 +191,12 @@ docker compose up -d --build
 The UI is on `http://<docker-host>:8080`. `./data` and `./media` are bind-mounted, so the
 database and audio library survive `docker compose down`.
 
+The container starts as root only long enough to take ownership of those two directories, then
+drops to an unprivileged user for the rest of its life. A bind mount replaces whatever the image
+had at that path, so the ownership set at build time is masked the moment `./data` is mounted —
+fixing it at runtime is the only place that can see the mount. Set `PUID`/`PGID` to your own
+account (`id -u` / `id -g`) if you want to read and edit those files directly on the host.
+
 On the Windows machine, start whisper-server and let the firewall through on that port:
 
 ```

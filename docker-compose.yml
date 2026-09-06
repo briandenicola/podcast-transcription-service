@@ -40,6 +40,12 @@ services:
       Maintenance__DeleteSourceAfterDays: "${DELETE_SOURCE_AFTER_DAYS:-30}"
       Maintenance__BackupsToKeep: "${BACKUPS_TO_KEEP:-7}"
 
+      # The entrypoint takes ownership of the mounted volumes as these ids, then drops to them.
+      # Defaults to the image's own unprivileged user; set them to a host account when the media
+      # library lives somewhere shared.
+      PUID: "${PUID:-}"
+      PGID: "${PGID:-}"
+
       Storage__DataPath: /data
       Storage__MediaPath: /media
       Storage__MaxUploadMb: "${MAX_UPLOAD_MB:-2048}"

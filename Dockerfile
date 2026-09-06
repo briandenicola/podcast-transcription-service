@@ -14,10 +14,12 @@ RUN dotnet publish src/PodcastTranscription.Web/PodcastTranscription.Web.csproj 
 # ---- runtime --------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-# ffmpeg decodes and resamples; curl backs the healthcheck. yt-dlp is fetched below as a
-# self-contained binary rather than from apt, whose builds go stale within weeks.
+# yt-dlp is fetched below as a self-contained binary rather than from apt, whose builds go
+# stale within weeks.
+# ffmpeg decodes and resamples, curl backs the healthcheck, and gosu lets the entrypoint drop
+# privileges after fixing volume ownership.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # The Linux release is a PyInstaller bundle: it carries its own interpreter, so nothing
@@ -36,9 +38,16 @@ RUN set -eux; \
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Mount points for the SQLite database and the audio library.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+
+# Mount points for the SQLite database and the audio library. A bind mount hides this chown, so
+# the entrypoint redoes it at runtime, where it can actually see the mount.
 RUN mkdir -p /data /media && chown -R app:app /data /media /app
-USER app
+
+# No USER here on purpose: the entrypoint starts as root only long enough to take ownership of
+# the volumes, then execs the app as an unprivileged user via gosu. Set PUID/PGID to have the
+# files owned by a host account instead.
 
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     Storage__DataPath=/data \
@@ -48,4 +57,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:8080/healthz || exit 1
 
-ENTRYPOINT ["dotnet", "PodcastTranscription.Web.dll"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["dotnet", "PodcastTranscription.Web.dll"]
