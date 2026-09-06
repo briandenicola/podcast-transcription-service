@@ -27,7 +27,7 @@ public class JobQueue(
     /// </summary>
     public async Task<Job> EnqueueAsync(
         int episodeId, string? language = null, string? prompt = null, string? model = null,
-        CancellationToken ct = default)
+        string? queuedBy = null, CancellationToken ct = default)
     {
         var feed = await db.Episodes
             .Where(e => e.Id == episodeId && e.FeedId != null)
@@ -40,13 +40,17 @@ public class JobQueue(
             State = JobState.Queued,
             Model = model ?? feed?.DefaultModel ?? whisper.Model,
             Language = language ?? feed?.DefaultLanguage,
-            Prompt = prompt ?? feed?.DefaultPrompt
+            Prompt = prompt ?? feed?.DefaultPrompt,
+
+            // Null when nobody asked: a feed poll, or a submission through the API.
+            QueuedBy = queuedBy
         };
 
         db.Jobs.Add(job);
         await db.SaveChangesAsync(ct);
 
-        log.LogInformation("Queued job {JobId} for episode {EpisodeId}", job.Id, episodeId);
+        log.LogInformation("Queued job {JobId} for episode {EpisodeId}{By}",
+            job.Id, episodeId, queuedBy is null ? "" : $" for {queuedBy}");
         notifier.Notify(job.Id);
         return job;
     }

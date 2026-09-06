@@ -48,7 +48,8 @@
 
             @if (segment.IsEdited)
             {
-                <span class="badge bg-light text-dark align-self-center" title="Corrected by hand">edited</span>
+                <span class="badge bg-light text-dark align-self-center"
+                      title="@EditedTitle(segment)">edited</span>
             }
         </div>
     }
@@ -72,6 +73,18 @@
     [Parameter] public int EpisodeId { get; set; }
 
     private readonly Dictionary<int, List<TranscribedWord>> _wordCache = [];
+
+    /// <summary>Who corrected this line, for the tooltip. Older corrections have no name recorded.</summary>
+    private static string EditedTitle(Segment segment)
+    {
+        if (segment.EditedBy is not { Length: > 0 } who)
+        {
+            return "Corrected by hand";
+        }
+
+        var when = segment.EditedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        return when is null ? $"Corrected by {who}" : $"Corrected by {who} on {when}";
+    }
 
     private List<TranscribedWord>? WordsFor(Segment segment)
     {

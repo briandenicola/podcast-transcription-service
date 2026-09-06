@@ -6,6 +6,7 @@
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Summarization
+@using PodcastTranscription.Web.Services.Security
 @implements IAsyncDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobQueue Queue
@@ -38,10 +39,13 @@ else
         <div class="text-end">
             @if (_activeJob is null)
             {
-                <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
-                    <a class="btn btn-sm" href="/delete/episode/@EpisodeId"
-                       title="Delete this episode, its transcripts and its audio">Delete episode</a>
-                </div>
+                <AuthorizeView Policy="@Roles.AdminPolicy">
+                    <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+                        <a class="btn btn-sm" href="/delete/episode/@EpisodeId"
+                           title="Delete this episode, its transcripts and its audio">Delete episode</a>
+                    </div>
+                </AuthorizeView>
+                <AuthorizeView Policy="@Roles.MemberPolicy">
                 <form method="post" action="/episodes/@EpisodeId/transcribe" class="input-group">
                     <AntiforgeryToken />
                     @* Recorded against the transcript, so the back catalogue can be reprocessed
@@ -52,13 +56,16 @@ else
                         @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
                     </button>
                 </form>
+                </AuthorizeView>
             }
             else
             {
-                <form method="post" action="/episodes/@EpisodeId/jobs/@_activeJob.Id/cancel">
-                    <AntiforgeryToken />
-                    <button type="submit" class="btn btn-outline-secondary">Cancel</button>
-                </form>
+                <AuthorizeView Policy="@Roles.MemberPolicy">
+                    <form method="post" action="/episodes/@EpisodeId/jobs/@_activeJob.Id/cancel">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-outline-secondary">Cancel</button>
+                    </form>
+                </AuthorizeView>
             }
         </div>
     </div>
@@ -117,10 +124,12 @@ else
     {
         <div class="alert alert-danger d-flex justify-content-between align-items-center">
             <span class="job-error" title="@failure.LastError"><strong>@failure.State.</strong> @failure.LastError</span>
-            <form method="post" action="/episodes/@EpisodeId/jobs/@failure.Id/retry">
-                <AntiforgeryToken />
-                <button type="submit" class="btn btn-sm btn-outline-danger">Retry</button>
-            </form>
+            <AuthorizeView Policy="@Roles.MemberPolicy">
+                <form method="post" action="/episodes/@EpisodeId/jobs/@failure.Id/retry">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Retry</button>
+                </form>
+            </AuthorizeView>
         </div>
     }
 
@@ -171,17 +180,19 @@ else
                        circuit and did nothing at all without one: they ticked and the page never
                        changed. Word timings and confidence shading cost nothing to render, so
                        they are simply always on now, and correcting a line is a link. *@
-                    @if (_editing)
-                    {
-                        <a class="btn btn-sm" href="@ViewLink(selected.Id)">Done correcting</a>
-                    }
-                    else
-                    {
-                        <a class="btn btn-sm" href="@ViewLink(selected.Id, edit: true)"
-                           title="Turn each line into a text box so you can correct what whisper misheard">
-                            Correct text
-                        </a>
-                    }
+                    <AuthorizeView Policy="@Roles.MemberPolicy">
+                        @if (_editing)
+                        {
+                            <a class="btn btn-sm" href="@ViewLink(selected.Id)">Done correcting</a>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm" href="@ViewLink(selected.Id, edit: true)"
+                               title="Turn each line into a text box so you can correct what whisper misheard">
+                                Correct text
+                            </a>
+                        }
+                    </AuthorizeView>
 
                     @* Shading every uncertain word is a lot of colour to look at all the time, so
                        it stays opt-in — as a link rather than the checkbox it used to be. *@
@@ -191,8 +202,10 @@ else
                     </a>
 
                     @* Throws away one run without touching the audio, so it can be transcribed again. *@
-                    <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
-                       title="Delete this transcript, keeping the episode and its audio">Delete transcript</a>
+                    <AuthorizeView Policy="@Roles.AdminPolicy">
+                        <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
+                           title="Delete this transcript, keeping the episode and its audio">Delete transcript</a>
+                    </AuthorizeView>
 
                     @* Plain links rather than a dropdown: a dropdown needs Bootstrap's JavaScript,
                        which this app does not load, so the button did nothing at all. *@
@@ -226,10 +239,12 @@ else
             {
                 <div class="alert alert-warning d-flex justify-content-between align-items-center">
                     <span><strong>Possible transcription fault.</strong> @warning</span>
-                    <form method="post" action="/episodes/@EpisodeId/transcribe">
-                        <AntiforgeryToken />
-                        <button type="submit" class="btn btn-sm btn-outline-dark">Re-transcribe</button>
-                    </form>
+                    <AuthorizeView Policy="@Roles.MemberPolicy">
+                        <form method="post" action="/episodes/@EpisodeId/transcribe">
+                            <AntiforgeryToken />
+                            <button type="submit" class="btn btn-sm btn-outline-dark">Re-transcribe</button>
+                        </form>
+                    </AuthorizeView>
                 </div>
             }
 

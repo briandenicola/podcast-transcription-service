@@ -22,14 +22,58 @@ that the word timestamps keep possible.
 
 ### Authentication
 
-A single admin account, on by default. whisper-server has no authentication of its own and this
-app holds a media library, so the app **refuses to start** with auth enabled and no password
-configured — better than either locking you out or quietly serving the library to the network.
+On by default. whisper-server has no authentication of its own and this app holds a media
+library, so the app **refuses to start** with auth enabled and no password configured — better
+than either locking you out or quietly serving the library to the network.
 
 Set `ADMIN_PASSWORD` to get going, then generate a PBKDF2 hash on the settings page and move it
 to `ADMIN_PASSWORD_HASH`, so the password itself is not readable in the environment. Everything
 is protected: pages, audio streaming and exports alike, via a fallback authorization policy
 rather than page-by-page opt-in. Only `/healthz`, the login page and static assets are open.
+
+### Users and roles
+
+Beyond the configured admin, accounts live in the database and admins manage them at **/users**.
+There are three roles:
+
+| | Viewer | Member | Admin |
+|---|:---:|:---:|:---:|
+| Browse, search, play, read transcripts, export | ✓ | ✓ | ✓ |
+| Add episodes, queue and cancel transcriptions | | ✓ | ✓ |
+| Correct transcript text, summarise | | ✓ | ✓ |
+| Subscribe to feeds, backfill, per-show defaults | | ✓ | ✓ |
+| Delete episodes, transcripts and jobs | | | ✓ |
+| Settings, retention, backups, other people's accounts | | | ✓ |
+
+Hiding a button from a viewer is a courtesy; the endpoint refusing them is the rule. Every
+state-changing endpoint declares the role it needs, and
+`tests/PodcastTranscription.Tests/EndpointAuthorizationTests.cs` fails the build if a new one
+forgets — that mistake is invisible until somebody with a read-only account deletes an episode.
+
+**The configured admin is not one of these accounts and cannot be edited or removed from the
+UI.** It stays in `.env` on purpose. An account that exists only in the database is an account
+that disappears when the database is restored from a backup predating it, and being locked out of
+your own library by a restore is a worse failure than any this table solves. It is the way back
+in, always.
+
+Two guards against the obvious self-inflicted wound: you cannot change your own role, and you
+cannot delete or deactivate the account you are signed in as.
+
+Passwords are PBKDF2 hashes, the same as the configured admin's, and at least
+8 characters. Usernames are case-insensitive and unique in that form, so `Brian` and `brian`
+cannot both exist and then race over who owns the login. Deactivating an account keeps it and its
+history while refusing the sign-in, which is what you want for someone who has left — deleting
+them only orphans the attribution.
+
+### Who did what
+
+Jobs record who queued them and the jobs table shows it; corrected transcript lines record who
+fixed them and when, in the tooltip on the **edited** badge.
+
+Both store a **username rather than a foreign key**, deliberately. Attribution is a record of
+what happened, so it must not change when an account is renamed or removed — and the configured
+admin has no row to point at in the first place. Blank means nobody asked: a feed poll, or a
+submission through the API.
 
 ### Submission API
 

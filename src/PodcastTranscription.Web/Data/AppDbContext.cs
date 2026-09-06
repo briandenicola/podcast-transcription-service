@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TranscriptChunk> TranscriptChunks => Set<TranscriptChunk>();
     public DbSet<Feed> Feeds => Set<Feed>();
     public DbSet<Summary> Summaries => Set<Summary>();
+    public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -86,6 +87,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithOne(x => x.Summary)
                 .HasForeignKey<Summary>(x => x.TranscriptId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AppUser>(e =>
+        {
+            // NOCASE, so the unique index really does stop "Brian" and "brian" both existing and
+            // then racing over who owns the login. A plain unique index in SQLite is
+            // case-sensitive and would happily allow both.
+            e.Property(x => x.Username).HasMaxLength(64).UseCollation("NOCASE");
+            e.HasIndex(x => x.Username).IsUnique();
+
+            // Stored as the integer, so renumbering the enum would relabel every account.
+            e.Property(x => x.Role).HasConversion<int>();
         });
 
         b.Entity<Feed>(e => e.HasIndex(x => x.RssUrl).IsUnique());

@@ -3,6 +3,7 @@
 @using PodcastTranscription.Web.Data
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services.Ingest
+@using PodcastTranscription.Web.Services.Security
 @using Microsoft.AspNetCore.WebUtilities
 @inject NavigationManager Navigation
 @inject IDbContextFactory<AppDbContext> DbFactory
@@ -16,12 +17,19 @@
 <div class="card mb-4">
     <div class="card-body">
         <label class="form-label" for="rss-url">Subscribe to a podcast</label>
-        <form method="post" action="/feeds/subscribe" class="input-group">
-            <AntiforgeryToken />
-            <input id="rss-url" name="rssUrl" class="form-control"
-                   placeholder="https://example.com/feed.xml" />
-            <button type="submit" class="btn btn-primary">Subscribe</button>
-        </form>
+        <AuthorizeView Policy="@Roles.MemberPolicy">
+            <Authorized>
+                <form method="post" action="/feeds/subscribe" class="input-group">
+                    <AntiforgeryToken />
+                    <input id="rss-url" name="rssUrl" class="form-control"
+                           placeholder="https://example.com/feed.xml" />
+                    <button type="submit" class="btn btn-primary">Subscribe</button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <p class="text-muted small mb-0">Subscribing to a feed needs a member account.</p>
+            </NotAuthorized>
+        </AuthorizeView>
         <div class="form-text">
             Episodes already in the feed are recorded but not queued. Use Backfill on a feed to
             transcribe history deliberately.

@@ -3,6 +3,7 @@
 @using PodcastTranscription.Web.Data
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Security
 @implements IDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobNotifier Notifier
@@ -59,6 +60,10 @@ else
                             <div class="small text-muted">retrying at @next.ToLocalTime().ToString("HH:mm:ss")</div>
                         }
                     </td>
+                    <td class="small">
+                        @* Blank for work nobody asked for: a feed poll, or the submission API. *@
+                        @(job.QueuedBy ?? "—")
+                    </td>
                     <td><span class="badge @JobDisplay.BadgeClass(job.State)">@job.State</span></td>
                     <td>
                         <div class="progress" style="height: 1.25rem;" role="progressbar"
@@ -78,23 +83,29 @@ else
                     <td class="text-end text-nowrap">
                         @if (JobDisplay.IsActive(job.State))
                         {
-                            <form method="post" action="/jobs/@job.Id/cancel" class="d-inline">
-                                <AntiforgeryToken />
-                                <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
-                            </form>
+                            <AuthorizeView Policy="@Roles.MemberPolicy">
+                                <form method="post" action="/jobs/@job.Id/cancel" class="d-inline">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+                                </form>
+                            </AuthorizeView>
                         }
                         else
                         {
                             @if (job.State is JobState.Failed or JobState.Cancelled)
                             {
-                                <form method="post" action="/jobs/@job.Id/retry" class="d-inline me-1">
-                                    <AntiforgeryToken />
-                                    <button type="submit" class="btn btn-sm btn-outline-primary">Retry</button>
-                                </form>
+                                <AuthorizeView Policy="@Roles.MemberPolicy">
+                                    <form method="post" action="/jobs/@job.Id/retry" class="d-inline me-1">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Retry</button>
+                                    </form>
+                                </AuthorizeView>
                             }
                             @* Only the job history goes; the transcript it produced is untouched. *@
-                            <a class="btn btn-sm" href="/delete/job/@job.Id"
-                               title="Remove this job from the history">Delete</a>
+                            <AuthorizeView Policy="@Roles.AdminPolicy">
+                                <a class="btn btn-sm" href="/delete/job/@job.Id"
+                                   title="Remove this job from the history">Delete</a>
+                            </AuthorizeView>
                         }
                     </td>
                 </tr>

@@ -102,6 +102,8 @@ builder.Services.AddScoped<YtDlpClient>();
 builder.Services.AddScoped<FeedService>();
 builder.Services.AddScoped<PodcastUrlResolver>();
 builder.Services.AddScoped<MaintenanceService>();
+builder.Services.AddScoped<UserStore>();
+builder.Services.AddScoped<SignInService>();
 builder.Services.AddScoped<TranscriptSummarizer>();
 builder.Services.AddScoped<SummaryService>();
 builder.Services.AddHttpClient(nameof(FeedService));
@@ -138,6 +140,12 @@ builder.Services
     });
 
 var authorization = builder.Services.AddAuthorizationBuilder();
+
+// Two policies above the fallback. Viewers satisfy only the fallback: they read the library and
+// change nothing. Members add the work — queuing, correcting, summarising, feeds — and admins add
+// everything that destroys or reconfigures, including other people's accounts.
+authorization.AddPolicy(Roles.AdminPolicy, policy => policy.RequireRole(Roles.Admin));
+authorization.AddPolicy(Roles.MemberPolicy, policy => policy.RequireRole(Roles.MemberOrAbove));
 
 if (authOptions.Enabled)
 {
@@ -220,6 +228,7 @@ app.MapRazorComponents<App>()
 app.MapUploadEndpoints();
 app.MapDeletionEndpoints();
 app.MapActionEndpoints();
+app.MapUserEndpoints();
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 

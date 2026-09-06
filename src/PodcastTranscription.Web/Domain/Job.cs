@@ -44,6 +44,14 @@ public class Job
     /// <summary>Audio seconds transcribed so far, for a realtime factor while the job is still running.</summary>
     public double ProcessedAudioSec { get; set; }
 
+    /// <summary>
+    /// Who asked for this, as a username rather than a foreign key. Attribution is a record of
+    /// what happened, so it must not change when an account is renamed or removed — and the
+    /// configured admin has no row to point at in the first place. Null for work the app started
+    /// by itself: a feed poll, or a submission through the API.
+    /// </summary>
+    public string? QueuedBy { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

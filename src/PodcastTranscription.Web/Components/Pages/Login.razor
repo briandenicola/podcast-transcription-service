@@ -10,6 +10,8 @@
 @attribute [ExcludeFromInteractiveRouting]
 @layout Layout.EmptyLayout
 @inject AdminAuthenticator Admin
+@inject SignInService SignIns
+@inject UserStore Users
 @inject NavigationManager Navigation
 @inject ILogger<Login> Log
 
@@ -70,10 +72,14 @@
 
     private async Task SignIn()
     {
-        if (!Admin.ValidateCredentials(Input.Username, Input.Password))
+        // Checks the configured admin and the accounts in the database, in that order.
+        var outcome = await SignIns.AuthenticateAsync(Input.Username, Input.Password);
+
+        if (!outcome.Succeeded)
         {
-            // Deliberately vague: saying which half was wrong helps only an attacker.
-            _error = "That username and password did not match.";
+            // Deliberately vague, except where saying more helps the person rather than someone
+            // guessing: a deactivated account cannot be fixed by trying another password.
+            _error = outcome.Reason ?? "That username and password did not match.";
             Log.LogWarning("Failed sign-in attempt for {Username} from {Ip}",
                 Input.Username, HttpContext.Connection.RemoteIpAddress);
             return;
@@ -81,14 +87,19 @@
 
         await HttpContext.SignInAsync(
             AdminAuthenticator.CookieScheme,
-            Admin.CreatePrincipal(),
+            outcome.Principal!,
             new AuthenticationProperties
             {
                 IsPersistent = true,
                 ExpiresUtc = DateTimeOffset.UtcNow.Add(Admin.SessionLength)
             });
 
-        Log.LogInformation("{Username} signed in", Admin.Username);
+        if (outcome.UserId is { } id)
+        {
+            await Users.RecordSignInAsync(id);
+        }
+
+        Log.LogInformation("{Username} signed in as {Role}", outcome.Username, outcome.Role);
         Navigation.NavigateTo(SafeReturnUrl(), forceLoad: true);
     }
 
