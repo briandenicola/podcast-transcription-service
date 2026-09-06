@@ -22,9 +22,9 @@
                 <div class="top-row">
                     <AuthorizeView>
                         <Authorized>
-                            <span>
-                                @context.User.Identity?.Name
-                                <span class="text-muted">· @RoleOf(context.User)</span>
+                            <span class="signed-in-user">
+                                <span class="signed-in-name">@context.User.Identity?.Name</span>
+                                <span class="signed-in-role text-muted">@RoleOf(context.User)</span>
                             </span>
                             @* A form rather than a link: signing out changes state, so a GET
                                should not be able to trigger it. *@

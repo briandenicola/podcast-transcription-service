@@ -93,11 +93,11 @@
         min-width: 0;
         min-height: 44px;
         padding: 8px 14px;
-        border: 2px solid var(--metro-foreground);
+        border: 2px solid var(--metro-accent);
         border-radius: 0;
-        background: var(--metro-background);
+        background: var(--metro-accent);
         box-shadow: none;
-        color: var(--metro-foreground);
+        color: #fff;
         font-family: var(--metro-font);
         font-size: 16px;
         font-weight: 400;
@@ -110,23 +110,15 @@
         font-size: 14px;
     }
 
-    .btn-primary {
-        border-color: var(--metro-accent);
-        background: var(--metro-accent);
-        color: #fff;
-        font-weight: 600;
-    }
-
-    .btn-danger,
-    .btn-outline-danger { border-color: var(--metro-danger); }
+    .btn-primary { font-weight: 600; }
 
     .btn:hover,
     .btn:focus-visible,
     .btn:active:not(:disabled),
     .btn.active {
         padding: 8px 14px;
-        border-color: var(--metro-accent);
-        background: var(--metro-accent);
+        border-color: #65c5ef;
+        background: #65c5ef;
         box-shadow: none;
         color: #fff;
         outline: none;
