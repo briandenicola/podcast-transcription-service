@@ -31,20 +31,63 @@
     };
 
     // Interactive controls need a live Blazor circuit. When it never connects the page still
-    // renders and the buttons simply do nothing, which is impossible to tell from a bug. The
-    // negotiate endpoint is what the circuit itself calls first, so its answer is the diagnosis.
-    const checkCircuit = async () => {
+    // renders and anything driven by the circuit simply does nothing, which is impossible to
+    // tell from a bug.
+    //
+    // This used to POST to _blazor/negotiate and call a 200 "connected", which was worse than
+    // useless: negotiate is an ordinary HTTP request, so it succeeds in exactly the setup that
+    // breaks the circuit — a proxy that forwards HTTP but not the websocket upgrade. It reported
+    // "connected" on a deployment where nothing interactive worked at all. The only honest test
+    // is to open the websocket, so that is what this does.
+    const checkCircuit = () => {
+        let settled = false;
+
+        const settle = (text) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            connectionText = text;
+            paint();
+        };
+
         try {
-            const response = await fetch('_blazor/negotiate?negotiateVersion=1', { method: 'POST' });
+            const url = new URL('_blazor', document.baseURI);
+            url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
 
-            connectionText = response.ok
-                ? 'Server: connected'
-                : `Server: NOT connected (HTTP ${response.status})`;
+            const socket = new WebSocket(url);
+
+            // A proxy that swallows the upgrade often leaves the request hanging rather than
+            // refusing it, so silence past this point counts as a failure.
+            const timer = setTimeout(() => {
+                settle('Server: no websocket');
+                try { socket.close(); } catch { /* already gone */ }
+            }, 8000);
+
+            socket.onopen = () => {
+                clearTimeout(timer);
+                settle('Server: connected');
+
+                // The handshake is SignalR's business; this only needed to know the upgrade works.
+                try { socket.close(); } catch { /* already gone */ }
+            };
+
+            socket.onerror = () => {
+                clearTimeout(timer);
+                settle('Server: no websocket');
+            };
+
+            // Reached without onopen having fired means the upgrade never completed, however
+            // politely it was refused. If it did open, settle() has already run and this is a
+            // no-op — the close is just this probe hanging up after a successful test.
+            socket.onclose = () => {
+                clearTimeout(timer);
+                settle('Server: no websocket');
+            };
         } catch (error) {
-            connectionText = 'Server: NOT connected';
+            settle('Server: no websocket');
         }
-
-        paint();
     };
 
     paint();

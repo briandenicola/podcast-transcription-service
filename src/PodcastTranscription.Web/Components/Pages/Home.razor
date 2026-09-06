@@ -14,42 +14,44 @@
     <a class="btn btn-primary" href="/upload">Add episode</a>
 </div>
 
-<div class="row g-2 align-items-end mb-3">
+<form method="get" action="/" class="row g-2 align-items-end mb-3" id="library-filters">
     <div class="col-md-4">
         <label class="form-label small mb-1" for="filter-title">Title</label>
         <input id="filter-title" class="form-control form-control-sm" placeholder="Filter by title"
-               @bind="_titleFilter" @bind:event="oninput" @bind:after="ApplyFilters" />
+               name="title" value="@_titleFilter" />
     </div>
     <div class="col-md-3">
         <label class="form-label small mb-1" for="filter-show">Show</label>
-        <select id="filter-show" class="form-select form-select-sm" @bind="_showFilter" @bind:after="ApplyFilters">
-            <option value="">All shows</option>
+        <select id="filter-show" name="show" class="form-select form-select-sm">
+            <option value="" selected="@(_showFilter.Length == 0)">All shows</option>
             @foreach (var show in _shows)
             {
-                <option value="@show">@show</option>
+                <option value="@show" selected="@(show == _showFilter)">@show</option>
             }
         </select>
     </div>
     <div class="col-md-2">
         <label class="form-label small mb-1" for="filter-state">State</label>
-        <select id="filter-state" class="form-select form-select-sm" @bind="_stateFilter" @bind:after="ApplyFilters">
-            <option value="">Any</option>
-            <option value="transcribed">Transcribed</option>
-            <option value="none">No transcript</option>
-            <option value="running">In progress</option>
-            <option value="failed">Failed</option>
+        <select id="filter-state" name="state" class="form-select form-select-sm">
+            @foreach (var (value, label) in States)
+            {
+                <option value="@value" selected="@(value == _stateFilter)">@label</option>
+            }
         </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <label class="form-label small mb-1" for="sort-by">Sort</label>
-        <select id="sort-by" class="form-select form-select-sm" @bind="_sort" @bind:after="ApplyFilters">
-            <option value="added-desc">Newest first</option>
-            <option value="added-asc">Oldest first</option>
-            <option value="title">Title</option>
-            <option value="duration-desc">Longest first</option>
+        <select id="sort-by" name="sort" class="form-select form-select-sm">
+            @foreach (var (value, label) in Sorts)
+            {
+                <option value="@value" selected="@(value == _sort)">@label</option>
+            }
         </select>
     </div>
-</div>
+    <div class="col-md-1">
+        <button type="submit" class="btn btn-sm w-100">Filter</button>
+    </div>
+</form>
 
 @if (DeleteError is not null)
 {
@@ -125,16 +127,16 @@ else
         <nav aria-label="Library pages">
             <ul class="pagination pagination-sm">
                 <li class="page-item @(_page == 1 ? "disabled" : "")">
-                    <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                    <a class="page-link" href="@PageLink(_page - 1)">Previous</a>
                 </li>
                 @foreach (var number in PageNumbers())
                 {
                     <li class="page-item @(number == _page ? "active" : "")">
-                        <button class="page-link" @onclick="() => GoToPage(number)">@number</button>
+                        <a class="page-link" href="@PageLink(number)">@number</a>
                     </li>
                 }
                 <li class="page-item @(_page == _pageCount ? "disabled" : "")">
-                    <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                    <a class="page-link" href="@PageLink(_page + 1)">Next</a>
                 </li>
             </ul>
         </nav>
@@ -150,32 +152,81 @@ else
     /// <summary>A refusal handed back by the delete endpoint, e.g. a job still running.</summary>
     [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
 
+    private static readonly (string Value, string Label)[] States =
+    [
+        ("", "Any"),
+        ("transcribed", "Transcribed"),
+        ("none", "No transcript"),
+        ("running", "In progress"),
+        ("failed", "Failed")
+    ];
+
+    private static readonly (string Value, string Label)[] Sorts =
+    [
+        ("added-desc", "Newest first"),
+        ("added-asc", "Oldest first"),
+        ("title", "Title"),
+        ("duration-desc", "Longest first")
+    ];
+
     private List<Row>? _episodes;
     private List<string> _shows = [];
-    private string? _titleFilter;
-    private string _showFilter = string.Empty;
-    private string _stateFilter = string.Empty;
-    private string _sort = "added-desc";
+
+    /// <summary>
+    /// Filters, sort and page all live in the query string. They used to be bound fields updated
+    /// by change handlers, which need a live Blazor circuit — so where the circuit does not
+    /// connect the filters silently did nothing. As URL state they work without one, and a
+    /// filtered library is a link you can keep.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "title")] private string? _titleFilter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "show")] private string? _showQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "state")] private string? _stateQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sort")] private string? _sortQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")] private int? _pageQuery { get; set; }
+
+    private string _showFilter => _showQuery ?? string.Empty;
+    private string _stateFilter => _stateQuery ?? string.Empty;
+    private string _sort => _sortQuery ?? "added-desc";
 
     private int _page = 1;
     private int _total;
     private int _pageCount = 1;
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>Keeps the current filters while changing only the page.</summary>
+    private string PageLink(int page)
+    {
+        var parts = new List<string>();
+
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                parts.Add($"{key}={Uri.EscapeDataString(value)}");
+            }
+        }
+
+        Add("title", _titleFilter);
+        Add("show", _showQuery);
+        Add("state", _stateQuery);
+        Add("sort", _sortQuery);
+
+        var clamped = Math.Clamp(page, 1, Math.Max(1, _pageCount));
+        if (clamped > 1)
+        {
+            parts.Add($"page={clamped}");
+        }
+
+        return parts.Count == 0 ? "/" : "/?" + string.Join("&", parts);
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         _shows = await Search.GetShowsAsync();
-        await LoadAsync();
-    }
-
-    private async Task ApplyFilters()
-    {
-        _page = 1;
-        await LoadAsync();
-    }
-
-    private async Task GoToPage(int page)
-    {
-        _page = Math.Clamp(page, 1, Math.Max(1, _pageCount));
+        _page = Math.Max(1, _pageQuery ?? 1);
         await LoadAsync();
     }
 

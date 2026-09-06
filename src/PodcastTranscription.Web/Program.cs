@@ -111,6 +111,9 @@ builder.Services.AddHttpClient(nameof(FeedService));
 builder.Services.AddSingleton<RunningJobs>();
 builder.Services.AddSingleton<JobNotifier>();
 
+// Summarising outlives the request that starts it, so the state has to be a singleton too.
+builder.Services.AddSingleton<SummaryRunner>();
+
 builder.Services.AddHostedService<TranscriptionWorker>();
 builder.Services.AddHostedService<FeedPoller>();
 builder.Services.AddHostedService<MaintenanceWorker>();
@@ -216,6 +219,7 @@ app.MapRazorComponents<App>()
 
 app.MapUploadEndpoints();
 app.MapDeletionEndpoints();
+app.MapActionEndpoints();
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 

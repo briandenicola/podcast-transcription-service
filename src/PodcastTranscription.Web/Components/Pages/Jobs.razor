@@ -5,7 +5,6 @@
 @using PodcastTranscription.Web.Services
 @implements IDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
-@inject JobQueue Queue
 @inject JobNotifier Notifier
 
 <PageTitle>Jobs</PageTitle>
@@ -79,13 +78,19 @@ else
                     <td class="text-end text-nowrap">
                         @if (JobDisplay.IsActive(job.State))
                         {
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => Cancel(job.Id)">Cancel</button>
+                            <form method="post" action="/jobs/@job.Id/cancel" class="d-inline">
+                                <AntiforgeryToken />
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+                            </form>
                         }
                         else
                         {
                             @if (job.State is JobState.Failed or JobState.Cancelled)
                             {
-                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => Retry(job.Id)">Retry</button>
+                                <form method="post" action="/jobs/@job.Id/retry" class="d-inline me-1">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Retry</button>
+                                </form>
                             }
                             @* Only the job history goes; the transcript it produced is untouched. *@
                             <a class="btn btn-sm" href="/delete/job/@job.Id"
@@ -132,18 +137,6 @@ else
         await LoadAsync();
         StateHasChanged();
     });
-
-    private async Task Cancel(int jobId)
-    {
-        await Queue.CancelAsync(jobId);
-        await LoadAsync();
-    }
-
-    private async Task Retry(int jobId)
-    {
-        await Queue.RetryAsync(jobId);
-        await LoadAsync();
-    }
 
 
     public void Dispose()

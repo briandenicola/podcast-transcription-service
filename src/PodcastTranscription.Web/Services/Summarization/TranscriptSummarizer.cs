@@ -31,7 +31,8 @@ public class TranscriptSummarizer(
     private const int MaxFoldRounds = 3;
 
     public async Task<SummaryDraft> SummarizeAsync(
-        string episodeTitle, string? show, IReadOnlyList<Segment> segments, CancellationToken ct = default)
+        string episodeTitle, string? show, IReadOnlyList<Segment> segments,
+        IProgress<SummaryProgress>? progress = null, CancellationToken ct = default)
     {
         var lines = TranscriptWindower.ToLines(segments);
         if (lines.Count == 0)
@@ -42,6 +43,14 @@ public class TranscriptSummarizer(
         var system = SummaryPrompts.WithExtra(SummaryPrompts.System, _options.ExtraInstructions);
         var windows = TranscriptWindower.Split(lines, _options.MaxWindowChars);
         var wallClock = Stopwatch.StartNew();
+
+        // One call per window plus the final one. Folding adds more, and raises the total as it
+        // goes — an estimate that grows is still far better than a spinner with no number on it,
+        // and on a long episode this is minutes of staring at the page.
+        var pass = 0;
+        var totalPasses = windows.Count + 1;
+
+        void Report(string stage) => progress?.Report(new SummaryProgress(pass, totalPasses, stage));
 
         var promptTokens = 0;
         var completionTokens = 0;
@@ -81,9 +90,12 @@ public class TranscriptSummarizer(
             for (var i = 0; i < windows.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                Report($"Reading part {i + 1} of {windows.Count}");
 
                 var completion = await ollama.GenerateAsync(
                     system, SummaryPrompts.MapPrompt(windows[i], i, windows.Count), ct);
+
+                pass++;
 
                 Account(completion);
                 notes.Add(completion.Text);
@@ -92,18 +104,21 @@ public class TranscriptSummarizer(
                     i + 1, windows.Count, completion.ElapsedMs);
             }
 
-            notes = await FoldAsync(notes, system, Account, ct);
+            notes = await FoldAsync(notes, system, Account, Report, () => { pass++; totalPasses++; }, ct);
 
             body = string.Join("\n\n", notes);
             bodyIsNotes = true;
         }
 
         ct.ThrowIfCancellationRequested();
+        Report("Writing the summary");
 
         var final = await ollama.GenerateAsync(
             system, SummaryPrompts.ReducePrompt(episodeTitle, show, body, bodyIsNotes), ct);
 
         Account(final);
+        pass++;
+        Report("Finished");
 
         log.LogInformation("Summarised '{Title}' with {Model} in {Elapsed}",
             episodeTitle, ollama.Model, wallClock.Elapsed);
@@ -122,7 +137,8 @@ public class TranscriptSummarizer(
     /// is the case for everything but a very long episode on a small context window.
     /// </summary>
     private async Task<List<string>> FoldAsync(
-        List<string> notes, string system, Action<OllamaCompletion> account, CancellationToken ct)
+        List<string> notes, string system, Action<OllamaCompletion> account,
+        Action<string> report, Action counted, CancellationToken ct)
     {
         for (var round = 0; round < MaxFoldRounds; round++)
         {
@@ -146,14 +162,16 @@ public class TranscriptSummarizer(
                 notes.Count, batches.Count, round + 1);
 
             var folded = new List<string>(batches.Count);
-            foreach (var batch in batches)
+            for (var i = 0; i < batches.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                report($"Combining notes ({i + 1} of {batches.Count})");
 
                 var completion = await ollama.GenerateAsync(
-                    system, SummaryPrompts.FoldPrompt(string.Join("\n\n", batch)), ct);
+                    system, SummaryPrompts.FoldPrompt(string.Join("\n\n", batches[i])), ct);
 
                 account(completion);
+                counted();
                 folded.Add(completion.Text);
             }
 
@@ -162,6 +180,15 @@ public class TranscriptSummarizer(
 
         return notes;
     }
+}
+
+/// <summary>
+/// How far along a run is. <see cref="TotalPasses"/> can rise mid-run when folding turns out to
+/// be needed, so it is an estimate rather than a promise.
+/// </summary>
+public record SummaryProgress(int Pass, int TotalPasses, string Stage)
+{
+    public int Percent => TotalPasses <= 0 ? 0 : Math.Clamp(Pass * 100 / TotalPasses, 0, 100);
 }
 
 /// <summary>A finished summary, before it is attached to anything.</summary>

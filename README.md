@@ -147,17 +147,37 @@ rest), including in the scoped stylesheets for the layout and nav, which read th
 cascade. Rescaling the whole app is a matter of editing those values rather than hunting pixel
 figures through five files.
 
-The status bar's right-hand panel reports whether the browser could reach the Blazor circuit.
-Interactive controls need one, and when it fails to connect the page still renders while buttons
-do nothing — indistinguishable from a bug unless something says so.
+### Nothing needs the websocket
+
+Blazor Server runs interactive controls over a websocket. Where that websocket does not connect —
+a reverse proxy that forwards HTTP but not the upgrade is all it takes — the page renders
+perfectly and every `@onclick` handler silently does nothing. It is indistinguishable from a
+broken app, and it is invisible in development, where the circuit always connects.
+
+So nothing that *changes something* depends on it. Every action in the UI is an ordinary form
+post to an endpoint that does the work and redirects back, carrying its outcome in the query
+string; every view option — which transcript is shown, whether lines are editable, whether
+low-confidence words are shaded, the library's filters, sort and page — is URL state reached by a
+link. All of it works with JavaScript switched off entirely, and a filtered library or a
+particular transcript is a link you can keep.
+
+`tests/PodcastTranscription.Tests/NoCircuitDependentControlsTests.cs` reads every component and
+fails the build if a new one reaches for a circuit handler instead. That guard exists because
+this went wrong four separate times before anyone connected the symptoms.
+
+The status bar's right-hand panel reports whether the browser could open that websocket, by
+opening one. It used to POST to `_blazor/negotiate` and call a 200 "connected", which was worse
+than useless: negotiate is an ordinary HTTP request, so it succeeds in exactly the setup that
+breaks the circuit, and it reported "connected" on a deployment where nothing interactive worked
+at all.
 
 Uploading shows a progress bar and an hourglass while the file transfers. That is progressive
 enhancement over the plain form post: a full episode is tens or hundreds of megabytes, and
 without it the browser sits on the form with no sign anything is happening — indistinguishable
 from a broken button. If the script does not run, the form still posts.
 
-Destructive and one-shot actions deliberately do not need that circuit. Uploading, subscribing to
-a feed and every delete are ordinary form posts, so they work even where the websocket does not.
+Uploading, subscribing to a feed and every delete are ordinary form posts, like everything else
+that changes something — see **Nothing needs the websocket** above.
 
 ### Deleting things
 
@@ -255,12 +275,23 @@ for the prompt and the answer, so the two move together.
 The summary card records which route was taken — "one pass" or "N passes" — because that is
 where any lost detail went.
 
-#### When it runs
+#### When it runs, and watching it
 
 By default, as the last step of every transcription job, with the job showing `Summarizing`
 while it happens. Set `OLLAMA_AUTO_SUMMARIZE=false` to leave it to the **Summarize** button on
 the episode page instead. Either way the button is there, and **Re-summarize** replaces the
 existing summary — unlike a transcript, it costs minutes rather than hours to make again.
+
+Pressing it starts the run in the background and returns immediately; the card then shows a
+progress bar naming the pass it is on — "Reading part 3 of 5", "Combining notes", "Writing the
+summary" — and how long it has been going. On a long episode that is several minutes of model
+time, and a bar that says which pass it is on is the difference between waiting and wondering
+whether it has hung.
+
+The bar is driven by polling `/episodes/{id}/summary-status`, not by a circuit, so it works in
+the same places everything else does. The run belongs to the server rather than to the page:
+navigating away or closing the tab does not stop it, and coming back shows it still going. A
+second press while one is in flight is ignored rather than starting a second run.
 
 Summarisation never fails a job. The transcript is written and marked complete *before* the
 model is asked for anything, so an Ollama that is down or a model that was never pulled costs

@@ -9,6 +9,7 @@
         @* In edit mode the line carries no timing data, so a click lands in the textbox instead
            of seeking the player. *@
         <div class="transcript-line @(segment.IsEdited ? "is-edited" : "")"
+             id="segment-@segment.Id"
              data-segment="@(Editable ? null : "")"
              data-t0="@(Editable ? null : segment.StartMs.ToString())"
              data-t1="@(Editable ? null : segment.EndMs.ToString())">
@@ -17,8 +18,13 @@
             @if (Editable)
             {
                 <span class="transcript-text">
-                    <input class="form-control form-control-sm" value="@segment.Text"
-                           @onchange="e => OnEdited(segment, e)" aria-label="Segment text" />
+                    <form method="post" action="/episodes/@EpisodeId/segments/@segment.Id"
+                          class="d-flex gap-1">
+                        <AntiforgeryToken />
+                        <input name="text" class="form-control form-control-sm" value="@segment.Text"
+                               aria-label="Segment text" />
+                        <button type="submit" class="btn btn-sm">Save</button>
+                    </form>
                 </span>
             }
             else
@@ -62,29 +68,10 @@
     /// place beats exporting and editing elsewhere.</summary>
     [Parameter] public bool Editable { get; set; }
 
-    [Parameter] public EventCallback<Segment> SegmentEdited { get; set; }
+    /// <summary>Where a correction posts back to. Required whenever <see cref="Editable"/> is set.</summary>
+    [Parameter] public int EpisodeId { get; set; }
 
     private readonly Dictionary<int, List<TranscribedWord>> _wordCache = [];
-
-    private async Task OnEdited(Segment segment, ChangeEventArgs e)
-    {
-        var text = e.Value?.ToString()?.Trim() ?? string.Empty;
-
-        if (text.Length == 0 || text == segment.Text)
-        {
-            return;
-        }
-
-        segment.Text = text;
-        segment.IsEdited = true;
-
-        // The word timings no longer describe this text, and silently keeping them would put the
-        // karaoke highlight on words that are not there any more.
-        segment.WordsJson = null;
-        _wordCache.Remove(segment.Id);
-
-        await SegmentEdited.InvokeAsync(segment);
-    }
 
     private List<TranscribedWord>? WordsFor(Segment segment)
     {

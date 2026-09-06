@@ -6,6 +6,8 @@
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Ingest
 @using Microsoft.Extensions.Options
+@using Microsoft.AspNetCore.WebUtilities
+@inject NavigationManager Navigation
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject FeedService Feeds
 @inject IOptions<IngestOptions> IngestSettings
@@ -25,13 +27,16 @@ else
             <div class="text-muted small text-break">@_feed.RssUrl</div>
         </div>
         <div class="text-end">
-            <button class="btn btn-outline-secondary" @onclick="PollNow" disabled="@_busy">Poll now</button>
+            <form method="post" action="/feeds/@FeedId/poll">
+                <AntiforgeryToken />
+                <button type="submit" class="btn btn-outline-secondary">Poll now</button>
+            </form>
         </div>
     </div>
 
-    @if (_message is not null)
+    @if (Message is { } message)
     {
-        <div class="alert @(_failed ? "alert-danger" : "alert-info") py-2">@_message</div>
+        <div class="alert @(Failed ? "alert-danger" : "alert-info") py-2">@message</div>
     }
 
     <div class="row g-4">
@@ -45,33 +50,37 @@ else
                         any jargon whisper keeps mangling.
                     </p>
 
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="auto-transcribe"
-                               @bind="_autoTranscribe" />
-                        <label class="form-check-label" for="auto-transcribe">
-                            Transcribe new episodes automatically
-                        </label>
-                    </div>
+                    <form method="post" action="/feeds/@FeedId/defaults">
+                        <AntiforgeryToken />
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="auto-transcribe"
+                                   name="autoTranscribe" checked="@_feed.AutoTranscribe" />
+                            <label class="form-check-label" for="auto-transcribe">
+                                Transcribe new episodes automatically
+                            </label>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label" for="default-model">Model</label>
-                        <input id="default-model" class="form-control" @bind="_model"
-                               placeholder="@Whisper.Model" />
-                        <div class="form-text">Must match what whisper-server was started with.</div>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="default-model">Model</label>
+                            <input id="default-model" name="model" class="form-control"
+                                   value="@_feed.DefaultModel" placeholder="@Whisper.Model" />
+                            <div class="form-text">Must match what whisper-server was started with.</div>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label" for="default-language">Language</label>
-                        <input id="default-language" class="form-control" @bind="_language" placeholder="auto" />
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="default-language">Language</label>
+                            <input id="default-language" name="language" class="form-control"
+                                   value="@_feed.DefaultLanguage" placeholder="auto" />
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label" for="default-prompt">Prompt</label>
-                        <textarea id="default-prompt" class="form-control" rows="3" @bind="_prompt"
-                                  placeholder="Kara Swisher, Scott Galloway, Pivot, EBITDA"></textarea>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="default-prompt">Prompt</label>
+                            <textarea id="default-prompt" name="prompt" class="form-control" rows="3"
+                                      placeholder="Kara Swisher, Scott Galloway, Pivot, EBITDA">@_feed.DefaultPrompt</textarea>
+                        </div>
 
-                    <button class="btn btn-primary" @onclick="SaveDefaults" disabled="@_busy">Save</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </form>
                 </div>
             </div>
 
@@ -82,12 +91,11 @@ else
                         Polling only takes new episodes. This queues the most recent recorded
                         episodes that have never been transcribed.
                     </p>
-                    <div class="input-group">
-                        <input type="number" min="1" max="500" class="form-control" @bind="_backfillCount" />
-                        <button class="btn btn-outline-primary" @onclick="Backfill" disabled="@_busy">
-                            Queue
-                        </button>
-                    </div>
+                    <form method="post" action="/feeds/@FeedId/backfill" class="input-group">
+                        <AntiforgeryToken />
+                        <input type="number" name="count" min="1" max="500" class="form-control" value="5" />
+                        <button type="submit" class="btn btn-outline-primary">Queue</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -141,21 +149,23 @@ else
 
     private Feed? _feed;
     private List<Row> _episodes = [];
-    private string? _message;
-    private bool _busy;
-    private bool _failed;
 
-    private bool _autoTranscribe;
-    private string? _model;
-    private string? _language;
-    private string? _prompt;
-    private int _backfillCount;
+    /// <summary>
+    /// Polling, saving defaults and backfilling are all form posts now (see ActionEndpoints),
+    /// so their outcome arrives in the query string. The form fields render straight from the
+    /// feed rather than from mirrored component state, which also means a failed save cannot
+    /// leave the page showing something that was never written.
+    /// </summary>
+    private string? Message => Query("notice") ?? Query("error");
 
-    protected override async Task OnParametersSetAsync()
-    {
-        _backfillCount = IngestSettings.Value.DefaultBackfillCount;
-        await LoadAsync();
-    }
+    private bool Failed => Query("error") is not null;
+
+    private string? Query(string key) =>
+        QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query).TryGetValue(key, out var value)
+            ? value.ToString()
+            : null;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
@@ -167,11 +177,6 @@ else
             return;
         }
 
-        _autoTranscribe = _feed.AutoTranscribe;
-        _model = _feed.DefaultModel;
-        _language = _feed.DefaultLanguage;
-        _prompt = _feed.DefaultPrompt;
-
         _episodes = await db.Episodes
             .Where(e => e.FeedId == FeedId)
             .OrderByDescending(e => e.PublishedAt ?? e.CreatedAt)
@@ -182,76 +187,4 @@ else
                 e.Jobs.OrderByDescending(j => j.CreatedAt).Select(j => (JobState?)j.State).FirstOrDefault()))
             .ToListAsync();
     }
-
-    private async Task SaveDefaults()
-    {
-        _busy = true;
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == FeedId);
-            if (feed is null)
-            {
-                return;
-            }
-
-            feed.AutoTranscribe = _autoTranscribe;
-            feed.DefaultModel = Blank(_model);
-            feed.DefaultLanguage = Blank(_language);
-            feed.DefaultPrompt = Blank(_prompt);
-            await db.SaveChangesAsync();
-
-            _failed = false;
-            _message = "Saved. New jobs for this feed will inherit these.";
-            await LoadAsync();
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task PollNow()
-    {
-        _busy = true;
-        _message = "Polling…";
-
-        try
-        {
-            var outcome = await Feeds.PollAsync(FeedId);
-
-            _failed = outcome.Error is not null;
-            _message = outcome.Error
-                ?? (outcome.Discovered == 0
-                    ? "No new episodes."
-                    : $"Found {outcome.Discovered} new episode(s), queued {outcome.Queued}.");
-
-            await LoadAsync();
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task Backfill()
-    {
-        _busy = true;
-        try
-        {
-            var queued = await Feeds.BackfillAsync(FeedId, _backfillCount);
-            _failed = false;
-            _message = queued == 0
-                ? "Nothing to backfill — every recorded episode already has a transcript or a job."
-                : $"Queued {queued} episode(s).";
-
-            await LoadAsync();
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

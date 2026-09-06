@@ -2,9 +2,11 @@
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Summarization
 
-@* Collapsible, and collapsed is not the default: on a finished episode the summary is the most
-   useful thing on the page, and the transcript is what you scroll to afterwards. *@
-<div class="summary-card @(Busy ? "is-busy-card" : "")">
+@* Everything here is a link or a form post. Summarising used to be an @onclick, which needs a
+   live Blazor circuit — and without one the button did nothing at all. *@
+<div class="summary-card" id="summary-card"
+     data-episode="@EpisodeId" data-transcript="@TranscriptId"
+     data-running="@(Run is { Finished: false } ? "true" : "false")">
     <div class="summary-titlebar">
         <span aria-hidden="true">📝</span>
         <span class="summary-title">Summary</span>
@@ -13,30 +15,41 @@
             <span class="summary-meta font-monospace" title="@Provenance(written)">@written.Model</span>
         }
         <span class="summary-actions">
-            @if (Summary is not null)
+            @if (Run is null or { Finished: true })
             {
-                <button class="btn btn-sm" type="button" @onclick="() => _collapsed = !_collapsed"
-                        title="@(_collapsed ? "Show the summary" : "Hide the summary")">
-                    @(_collapsed ? "Show" : "Hide")
-                </button>
+                <form method="post" action="/episodes/@EpisodeId/summarize">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="transcriptId" value="@TranscriptId" />
+                    <button type="submit" class="btn btn-sm" disabled="@(!Enabled)" title="@ButtonTitle">
+                        @(Summary is null ? "Summarize" : "Re-summarize")
+                    </button>
+                </form>
             }
-            <button class="btn btn-sm" type="button" @onclick="OnSummarize" disabled="@(Busy || !Enabled)"
-                    title="@ButtonTitle">
-                @(Summary is null ? "Summarize" : "Re-summarize")
-            </button>
         </span>
     </div>
 
     <div class="summary-body">
-        @if (Busy)
+        @if (Run is { Finished: false } running)
         {
+            @* Real progress, not a spinner: a long episode is read in several passes and each one
+               is minutes of model time, so "part 3 of 6" is the difference between waiting and
+               wondering whether it is broken. Driven by a poll, so it moves without a circuit. *@
             <div class="upload-progress-label">
                 <span class="upload-hourglass" aria-hidden="true"></span>
-                <span>
-                    Reading the transcript with @ModelName. A long episode goes through in
-                    several passes, so this takes a few minutes.
-                </span>
+                <span id="summary-stage">@running.Stage</span>
             </div>
+            <div class="progress mt-2" role="progressbar" aria-label="Summarisation progress"
+                 aria-valuenow="@running.Percent" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" id="summary-bar" style="width: @running.Percent%;"></div>
+            </div>
+            <div class="summary-footer text-muted">
+                <span id="summary-elapsed">@((int)running.Elapsed.TotalSeconds)s</span> elapsed ·
+                @ModelName · this page updates itself, and the run carries on if you leave it.
+            </div>
+        }
+        else if (Run is { Finished: true, Succeeded: false, Error: { } failure })
+        {
+            <div class="alert alert-danger mb-0">@failure</div>
         }
         else if (Error is { } error)
         {
@@ -56,7 +69,7 @@
                 @ModelName for a read of what is argued in the episode and who argues it.
             </p>
         }
-        else if (!_collapsed)
+        else
         {
             <div class="summary-content" id="summary-body">
                 @Rendered
@@ -69,23 +82,24 @@
 @code {
     [Parameter] public Summary? Summary { get; set; }
 
+    [Parameter, EditorRequired] public int EpisodeId { get; set; }
+
+    [Parameter, EditorRequired] public int TranscriptId { get; set; }
+
+    /// <summary>The run in flight, or the one that just finished. Null when none was ever started.</summary>
+    [Parameter] public SummaryRun? Run { get; set; }
+
     /// <summary>False when Ollama is not configured, which turns the button into an explanation.</summary>
     [Parameter] public bool Enabled { get; set; }
-
-    [Parameter] public bool Busy { get; set; }
 
     [Parameter] public string? Error { get; set; }
 
     /// <summary>The configured model, for the empty state — <see cref="Summary"/> carries its own.</summary>
     [Parameter] public string ModelName { get; set; } = "the configured model";
 
-    [Parameter] public EventCallback OnSummarize { get; set; }
-
-    private bool _collapsed;
-
     /// <summary>
-    /// Cached against the text it was built from: the render walks the whole summary, and Blazor
-    /// re-renders this component on every player tick and job notification on the page.
+    /// Cached against the text it was built from: the render walks the whole summary, and this
+    /// component re-renders on every job notification on the page.
     /// </summary>
     private string? _renderedFrom;
     private MarkupString _rendered;
