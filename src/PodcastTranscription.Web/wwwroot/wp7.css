@@ -354,6 +354,8 @@
 
     .episode-heading > .text-end .d-flex { justify-content: flex-start !important; }
 
+    .episode-delete-header { display: none !important; }
+
     .episode-player {
         position: sticky;
         z-index: 20;
@@ -374,16 +376,63 @@
     }
 
     .reader-tools {
-        align-items: flex-start !important;
-        gap: 14px !important;
-        padding: 10px 0;
+        display: block !important;
+        padding: 18px 0;
         border-top: 1px solid var(--metro-rule);
         border-bottom: 1px solid var(--metro-rule);
     }
 
-    .reader-tools > .d-flex {
-        align-items: flex-start !important;
-        gap: 8px !important;
+    .reader-tools > .text-muted {
+        margin-bottom: 18px;
+        line-height: 1.45;
+    }
+
+    .reader-actions {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 10px 12px;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .reader-action-row { display: contents; }
+
+    .reader-action-label {
+        display: flex;
+        align-items: center;
+        color: var(--metro-secondary);
+        font-size: 14px;
+        font-weight: 400;
+        text-transform: lowercase;
+    }
+
+    .reader-action-controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .reader-action-controls .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        margin: 0;
+        text-align: center;
+    }
+
+    .reader-action-controls .metro-only-action { display: inline-flex; }
+
+    .reader-action-controls.export-links {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .reader-action-controls.export-links .btn {
+        padding-right: 4px;
+        padding-left: 4px;
+        font-size: 12px;
     }
 
     .reader-pivot {
@@ -716,16 +765,7 @@
 
     .input-group > .btn { flex: 1 0 auto; }
 
-    .reader-tools > .d-flex {
-        width: 100%;
-        flex-wrap: wrap;
-    }
-
     .export-links {
-        display: flex;
         width: 100%;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px;
     }
 }

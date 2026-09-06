@@ -40,7 +40,7 @@ else
             @if (_activeJob is null)
             {
                 <AuthorizeView Policy="@Roles.AdminPolicy">
-                    <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+                    <div class="episode-delete-header d-flex justify-content-end align-items-center gap-2 mb-2">
                         <a class="btn btn-sm" href="/delete/episode/@EpisodeId"
                            title="Delete this episode, its transcripts and its audio">Delete episode</a>
                     </div>
@@ -174,50 +174,63 @@ else
                     }
                 </div>
 
-                <div class="d-flex align-items-center gap-3">
-                    @* The toggles that used to sit here — Edit text, Compare runs, Word timings,
-                       Low confidence — were @onchange handlers, so they needed a live Blazor
-                       circuit and did nothing at all without one: they ticked and the page never
-                       changed. Word timings and confidence shading cost nothing to render, so
-                       they are simply always on now, and correcting a line is a link. *@
-                    <AuthorizeView Policy="@Roles.MemberPolicy">
-                        @if (_editing)
-                        {
-                            <a class="btn btn-sm" href="@ViewLink(selected.Id)">Done correcting</a>
-                        }
-                        else
-                        {
-                            <a class="btn btn-sm" href="@ViewLink(selected.Id, edit: true)"
-                               title="Turn each line into a text box so you can correct what whisper misheard">
-                                Correct text
+                <div class="reader-actions">
+                    <div class="reader-action-row">
+                        <span class="reader-action-label">Display</span>
+                        <div class="reader-action-controls">
+                            @* The toggles that used to sit here — Edit text, Compare runs, Word timings,
+                               Low confidence — were @onchange handlers, so they needed a live Blazor
+                               circuit and did nothing at all without one: they ticked and the page never
+                               changed. Word timings and confidence shading cost nothing to render, so
+                               they are simply always on now, and correcting a line is a link. *@
+                            <AuthorizeView Policy="@Roles.MemberPolicy">
+                                @if (_editing)
+                                {
+                                    <a class="btn btn-sm" href="@ViewLink(selected.Id)">Done correcting</a>
+                                }
+                                else
+                                {
+                                    <a class="btn btn-sm" href="@ViewLink(selected.Id, edit: true)"
+                                       title="Turn each line into a text box so you can correct what whisper misheard">
+                                        Correct text
+                                    </a>
+                                }
+                            </AuthorizeView>
+
+                            @* Shading every uncertain word is a lot of colour to look at all the time, so
+                               it stays opt-in — as a link rather than the checkbox it used to be. *@
+                            <a class="btn btn-sm" href="@ViewLink(selected.Id, shade: !_shading)"
+                               title="Shade the words whisper was least sure of, amber through red">
+                                @(_shading ? "Hide shading" : "Low confidence")
                             </a>
-                        }
-                    </AuthorizeView>
+                        </div>
+                    </div>
 
-                    @* Shading every uncertain word is a lot of colour to look at all the time, so
-                       it stays opt-in — as a link rather than the checkbox it used to be. *@
-                    <a class="btn btn-sm" href="@ViewLink(selected.Id, shade: !_shading)"
-                       title="Shade the words whisper was least sure of, amber through red">
-                        @(_shading ? "Hide shading" : "Low confidence")
-                    </a>
-
-                    @* Throws away one run without touching the audio, so it can be transcribed again. *@
                     <AuthorizeView Policy="@Roles.AdminPolicy">
-                        <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
-                           title="Delete this transcript, keeping the episode and its audio">Delete transcript</a>
+                        <div class="reader-action-row">
+                            <span class="reader-action-label">Delete</span>
+                            <div class="reader-action-controls">
+                                <a class="btn btn-sm metro-only-action" href="/delete/episode/@EpisodeId"
+                                   title="Delete this episode, its transcripts and its audio">Episode</a>
+                                <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
+                                   title="Delete this transcript, keeping the episode and its audio">Transcript</a>
+                            </div>
+                        </div>
                     </AuthorizeView>
 
                     @* Plain links rather than a dropdown: a dropdown needs Bootstrap's JavaScript,
                        which this app does not load, so the button did nothing at all. *@
-                    <span class="export-links small">
-                        <span class="text-muted me-1">Export</span>
-                        @foreach (var (format, label, extension) in ExportFormats)
-                        {
-                            <a class="btn btn-sm btn-outline-secondary"
-                               href="/episodes/@EpisodeId/transcripts/@selected.Id/export/@format"
-                               title="@label">@extension</a>
-                        }
-                    </span>
+                    <div class="reader-action-row">
+                        <span class="reader-action-label">Export</span>
+                        <span class="reader-action-controls export-links small">
+                            @foreach (var (format, label, extension) in ExportFormats)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="/episodes/@EpisodeId/transcripts/@selected.Id/export/@format"
+                                   title="@label">@extension</a>
+                            }
+                        </span>
+                    </div>
                 </div>
             </div>
 

@@ -608,6 +608,17 @@ button.transcript-time:focus-visible {
 
 .export-links .btn { margin-left: var(--w95-gap-xs); }
 
+.reader-actions,
+.reader-action-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--w95-gap);
+}
+
+.reader-action-row { display: contents; }
+.reader-action-label { display: none; }
+.metro-only-action { display: none; }
+
 /* =============================================================== summary == */
 
 /* Presented as its own little window, because that is what it is: a second
