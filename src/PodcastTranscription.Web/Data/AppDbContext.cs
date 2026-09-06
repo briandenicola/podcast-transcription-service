@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Segment> Segments => Set<Segment>();
     public DbSet<TranscriptChunk> TranscriptChunks => Set<TranscriptChunk>();
     public DbSet<Feed> Feeds => Set<Feed>();
+    public DbSet<Summary> Summaries => Set<Summary>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -72,6 +73,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Transcript)
                 .WithMany(x => x.Chunks)
                 .HasForeignKey(x => x.TranscriptId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // One summary per transcript, enforced rather than assumed: re-summarising updates the
+        // row it finds, and a unique index is what stops a race between the pipeline and someone
+        // pressing the button from quietly leaving two.
+        b.Entity<Summary>(e =>
+        {
+            e.HasIndex(x => x.TranscriptId).IsUnique();
+            e.HasOne(x => x.Transcript)
+                .WithOne(x => x.Summary)
+                .HasForeignKey<Summary>(x => x.TranscriptId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

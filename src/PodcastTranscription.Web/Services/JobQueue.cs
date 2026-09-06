@@ -112,7 +112,8 @@ public class JobQueue(
         var orphaned = await db.Jobs
             .Where(j => j.State == JobState.Downloading
                      || j.State == JobState.Preparing
-                     || j.State == JobState.Transcribing)
+                     || j.State == JobState.Transcribing
+                     || j.State == JobState.Summarizing)
             .ToListAsync(ct);
 
         foreach (var job in orphaned)

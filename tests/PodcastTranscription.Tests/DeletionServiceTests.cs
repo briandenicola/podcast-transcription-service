@@ -87,6 +87,10 @@ public class DeletionServiceTests : IDisposable
         {
             TranscriptId = transcript.Id, Index = 0, StartMs = 0, EndMs = 5000, RawJson = "{}"
         });
+        db.Summaries.Add(new Summary
+        {
+            TranscriptId = transcript.Id, Model = "llama3.1:8b", Content = "## Overview\nSomething."
+        });
 
         var job = new Job
         {
@@ -113,6 +117,7 @@ public class DeletionServiceTests : IDisposable
         Assert.Empty(verify.Transcripts);
         Assert.Empty(verify.Segments);
         Assert.Empty(verify.TranscriptChunks);
+        Assert.Empty(verify.Summaries);
         Assert.Empty(verify.Jobs);
     }
 

@@ -8,6 +8,7 @@
 window.podcastPlayer = (() => {
     let audio = null;
     let container = null;
+    let cues = null;
     let segments = [];
     let words = [];
     let activeSegment = null;
@@ -86,22 +87,49 @@ window.podcastPlayer = (() => {
         }
     };
 
-    // One delegated listener rather than thousands: any element carrying a start time seeks to it.
-    const onClick = (event) => {
-        const target = event.target.closest('[data-t0]');
-        if (!target || !container.contains(target)) {
+    const seekAndPlay = (ms) => {
+        if (!Number.isFinite(ms)) {
             return;
         }
 
-        const ms = Number(target.dataset.t0);
-        if (Number.isFinite(ms)) {
-            audio.currentTime = ms / 1000;
-            audio.play().catch(() => { /* autoplay refused; the seek still happened */ });
+        audio.currentTime = ms / 1000;
+        audio.play().catch(() => { /* autoplay refused; the seek still happened */ });
+    };
+
+    const clickHandlerFor = (root) => (event) => {
+        const target = event.target.closest('[data-t0]');
+        if (!target || !root.contains(target)) {
+            return;
         }
+
+        seekAndPlay(Number(target.dataset.t0));
+    };
+
+    // One delegated listener rather than thousands: any element carrying a start time seeks to it.
+    let onClick = null;
+
+    // The same, for the [hh:mm:ss] the summary cites. It sits outside the transcript, so it
+    // needs its own listener — but pressing one should do exactly what clicking a line does.
+    let onCueClick = null;
+
+    const onCueKey = (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        const target = event.target.closest('[data-t0]');
+        if (!target || !cues.contains(target)) {
+            return;
+        }
+
+        // The cues are anchors without an href, so the browser gives them no keyboard
+        // activation of their own.
+        event.preventDefault();
+        seekAndPlay(Number(target.dataset.t0));
     };
 
     return {
-        init(audioId, containerId) {
+        init(audioId, containerId, cueContainerId) {
             const nextAudio = document.getElementById(audioId);
             const nextContainer = document.getElementById(containerId);
             if (!nextAudio || !nextContainer) {
@@ -119,8 +147,18 @@ window.podcastPlayer = (() => {
             activeSegment = null;
             activeWord = null;
 
+            onClick = clickHandlerFor(container);
+
             audio.addEventListener('timeupdate', onTimeUpdate);
             container.addEventListener('click', onClick);
+
+            // Optional: the summary card is only on the page once there is a summary.
+            cues = cueContainerId ? document.getElementById(cueContainerId) : null;
+            if (cues) {
+                onCueClick = clickHandlerFor(cues);
+                cues.addEventListener('click', onCueClick);
+                cues.addEventListener('keydown', onCueKey);
+            }
 
             onTimeUpdate();
         },
@@ -139,12 +177,20 @@ window.podcastPlayer = (() => {
                 audio.removeEventListener('timeupdate', onTimeUpdate);
             }
 
-            if (container) {
+            if (container && onClick) {
                 container.removeEventListener('click', onClick);
+            }
+
+            if (cues && onCueClick) {
+                cues.removeEventListener('click', onCueClick);
+                cues.removeEventListener('keydown', onCueKey);
             }
 
             audio = null;
             container = null;
+            cues = null;
+            onClick = null;
+            onCueClick = null;
             segments = [];
             words = [];
             activeSegment = null;

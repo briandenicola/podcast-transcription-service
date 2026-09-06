@@ -5,12 +5,14 @@
 @using PodcastTranscription.Web.Data
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Summarization
 @implements IAsyncDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobQueue Queue
 @inject JobNotifier Notifier
 @inject DeletionService Deletion
 @inject WhisperClient Whisper
+@inject SummaryService Summaries
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -199,6 +201,13 @@ else
                 <strong>Low confidence</strong> shades the words it was unsure of
             </div>
 
+            <SummaryCard Summary="selected.Summary"
+                         Enabled="Summaries.Enabled"
+                         Busy="_summarizing"
+                         Error="@_summaryError"
+                         ModelName="@Summaries.Model"
+                         OnSummarize="() => Summarize(selected.Id)" />
+
             @if (selected.QualityWarning is { } warning)
             {
                 <div class="alert alert-warning d-flex justify-content-between align-items-center">
@@ -272,6 +281,8 @@ else
     private bool _shadeConfidence;
     private bool _editing;
     private bool _comparing;
+    private bool _summarizing;
+    private string? _summaryError;
     private string? _modelOverride;
     private readonly bool _follow = true;
 
@@ -322,6 +333,7 @@ else
         _transcripts = await db.Transcripts
             .Where(t => t.EpisodeId == EpisodeId)
             .Include(t => t.Segments.OrderBy(s => s.Ordinal))
+            .Include(t => t.Summary)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
@@ -347,7 +359,9 @@ else
         }
 
         // Re-bind after every render: toggling words replaces the elements the player tracks.
-        await JS.InvokeVoidAsync("podcastPlayer.init", "episode-audio", "transcript-body");
+        // The third container is the summary card, whose [hh:mm:ss] cues seek the same player.
+        // Absent until a summary exists, which the player treats as optional.
+        await JS.InvokeVoidAsync("podcastPlayer.init", "episode-audio", "transcript-body", "summary-body");
         _playerReady = true;
 
         if (_pendingSeekMs is { } ms)
@@ -419,6 +433,29 @@ else
         await LoadAsync();
         StateHasChanged();
     });
+
+    /// <summary>
+    /// Runs the summary on demand. Long enough to need the busy state — several minutes on a
+    /// three-hour episode — but it is a foreground action someone asked for, so it is awaited
+    /// here rather than pushed through the job queue.
+    /// </summary>
+    private async Task Summarize(int transcriptId)
+    {
+        _summarizing = true;
+        _summaryError = null;
+
+        try
+        {
+            var result = await Summaries.SummarizeAsync(transcriptId);
+            _summaryError = result.Error;
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _summarizing = false;
+        }
+    }
 
     private async Task Enqueue()
     {

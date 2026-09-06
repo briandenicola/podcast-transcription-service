@@ -1,26 +1,26 @@
 /* The sidebar as a Win95 program group: a list of items, selection filled navy. */
 
 .nav-header {
-    font-size: 11px;
+    font-size: var(--w95-text-size-sm);
     font-weight: bold;
-    padding: 3px 5px 5px;
+    padding: var(--w95-gap-sm) var(--w95-gap-sm) var(--w95-gap);
     color: #3f3f3f;
     border-bottom: 1px solid #808080;
-    margin-bottom: 4px;
+    margin-bottom: var(--w95-gap-sm);
 }
 
 .nav {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
 }
 
-.nav-item { padding: 0 2px; }
+.nav-item { padding: 0 3px; }
 
 ::deep .nav-link {
     display: block;
-    padding: 3px 6px;
-    font-size: 12px;
+    padding: var(--w95-gap-sm) var(--w95-gap);
+    font-size: var(--w95-text-size);
     color: #000;
     text-decoration: none;
     border-radius: 0;
@@ -39,7 +39,7 @@
 
 ::deep .nav-link .nav-icon {
     display: inline-block;
-    width: 15px;
+    width: 18px;
     text-align: center;
-    margin-right: 3px;
+    margin-right: var(--w95-gap-sm);
 }

@@ -1,0 +1,129 @@
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Summarization
+
+@* Collapsible, and collapsed is not the default: on a finished episode the summary is the most
+   useful thing on the page, and the transcript is what you scroll to afterwards. *@
+<div class="summary-card @(Busy ? "is-busy-card" : "")">
+    <div class="summary-titlebar">
+        <span aria-hidden="true">📝</span>
+        <span class="summary-title">Summary</span>
+        @if (Summary is { } written)
+        {
+            <span class="summary-meta font-monospace" title="@Provenance(written)">@written.Model</span>
+        }
+        <span class="summary-actions">
+            @if (Summary is not null)
+            {
+                <button class="btn btn-sm" type="button" @onclick="() => _collapsed = !_collapsed"
+                        title="@(_collapsed ? "Show the summary" : "Hide the summary")">
+                    @(_collapsed ? "Show" : "Hide")
+                </button>
+            }
+            <button class="btn btn-sm" type="button" @onclick="OnSummarize" disabled="@(Busy || !Enabled)"
+                    title="@ButtonTitle">
+                @(Summary is null ? "Summarize" : "Re-summarize")
+            </button>
+        </span>
+    </div>
+
+    <div class="summary-body">
+        @if (Busy)
+        {
+            <div class="upload-progress-label">
+                <span class="upload-hourglass" aria-hidden="true"></span>
+                <span>
+                    Reading the transcript with @ModelName. A long episode goes through in
+                    several passes, so this takes a few minutes.
+                </span>
+            </div>
+        }
+        else if (Error is { } error)
+        {
+            <div class="alert alert-danger mb-0">@error</div>
+        }
+        else if (!Enabled)
+        {
+            <p class="text-muted mb-0 small">
+                Summaries are off. Set <code>OLLAMA_ENABLED=true</code> and
+                <code>OLLAMA_BASE_URL</code> in <code>.env</code>, then restart.
+            </p>
+        }
+        else if (Summary is null)
+        {
+            <p class="text-muted mb-0 small">
+                No summary yet. <strong>Summarize</strong> sends this transcript to
+                @ModelName for a read of what is argued in the episode and who argues it.
+            </p>
+        }
+        else if (!_collapsed)
+        {
+            <div class="summary-content" id="summary-body">
+                @Rendered
+            </div>
+            <div class="summary-footer text-muted">@Provenance(Summary)</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Summary? Summary { get; set; }
+
+    /// <summary>False when Ollama is not configured, which turns the button into an explanation.</summary>
+    [Parameter] public bool Enabled { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>The configured model, for the empty state — <see cref="Summary"/> carries its own.</summary>
+    [Parameter] public string ModelName { get; set; } = "the configured model";
+
+    [Parameter] public EventCallback OnSummarize { get; set; }
+
+    private bool _collapsed;
+
+    /// <summary>
+    /// Cached against the text it was built from: the render walks the whole summary, and Blazor
+    /// re-renders this component on every player tick and job notification on the page.
+    /// </summary>
+    private string? _renderedFrom;
+    private MarkupString _rendered;
+
+    private MarkupString Rendered
+    {
+        get
+        {
+            var content = Summary?.Content ?? string.Empty;
+            if (_renderedFrom != content)
+            {
+                _rendered = new MarkupString(SummaryMarkdown.ToHtml(content));
+                _renderedFrom = content;
+            }
+
+            return _rendered;
+        }
+    }
+
+    private string ButtonTitle => Enabled
+        ? "Send this transcript to Ollama and write a summary of what the episode argues"
+        : "Ollama is not configured — set Ollama__Enabled and Ollama__BaseUrl";
+
+    private static string Provenance(Summary summary)
+    {
+        var parts = new List<string>
+        {
+            summary.Model,
+            summary.WindowCount > 1 ? $"{summary.WindowCount} passes" : "one pass",
+            $"{summary.DurationMs / 1000.0:N0}s",
+            summary.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        };
+
+        if (summary.PromptTokens is { } prompt and > 0)
+        {
+            parts.Insert(2, $"{prompt:N0} tokens in");
+        }
+
+        return string.Join(" · ", parts);
+    }
+}

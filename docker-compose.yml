@@ -1,4 +1,5 @@
-# The app runs here; whisper.cpp runs on the box that owns the GPU.
+# The app runs here; whisper.cpp runs on the box that owns the GPU, and Ollama writes the
+# episode summaries — usually on that same box, since it is the one with the VRAM.
 #
 # Whisper__BaseUrl is the only setting that has to be right for transcription to work.
 # Point it at whisper-server wherever it lives — a Windows machine with the NVIDIA card,
@@ -7,6 +8,13 @@
 # Start whisper-server on the GPU box with something like:
 #   whisper-server.exe -m models/ggml-large-v3-turbo-q5_0.bin --host 0.0.0.0 --port 8080
 # and make sure its firewall lets this host reach that port.
+#
+# Summaries are optional and off until asked for. To turn them on, set OLLAMA_ENABLED=true and
+# point OLLAMA_BASE_URL at an Ollama server, having pulled the model there first:
+#   ollama serve
+#   ollama pull llama3.1:8b
+# Ollama binds to 127.0.0.1 by default, so it needs OLLAMA_HOST=0.0.0.0 to be reachable from
+# this container. The Settings page has a connection test for it, as it does for whisper.
 
 services:
   transcriber:
@@ -28,6 +36,25 @@ services:
       Whisper__Language: "${WHISPER_LANGUAGE:-auto}"
       # A long file is one long request. The 100 s HttpClient default would fail every episode.
       Whisper__RequestTimeoutMinutes: "${WHISPER_TIMEOUT_MINUTES:-120}"
+
+      # ---- Ollama: agentic episode summaries ----
+      # Off unless asked for, so a host without an Ollama does not fail a call after every job.
+      Ollama__Enabled: "${OLLAMA_ENABLED:-false}"
+      Ollama__BaseUrl: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      # Must already be pulled on that server: `ollama pull <model>`.
+      Ollama__Model: "${OLLAMA_MODEL:-llama3.1:8b}"
+      # Summarise as the last step of every job. False leaves it to the button on the episode page.
+      Ollama__AutoSummarize: "${OLLAMA_AUTO_SUMMARIZE:-true}"
+      # Ollama's own default context is 2048 tokens, which silently truncates anything
+      # episode-sized. Raise both together: the window has to fit inside the context.
+      Ollama__ContextTokens: "${OLLAMA_CONTEXT_TOKENS:-8192}"
+      Ollama__MaxWindowChars: "${OLLAMA_WINDOW_CHARS:-12000}"
+      Ollama__MaxOutputTokens: "${OLLAMA_MAX_OUTPUT_TOKENS:-1200}"
+      Ollama__Temperature: "${OLLAMA_TEMPERATURE:-0.2}"
+      # A long episode is several generate calls back to back; a CPU-only model is slow.
+      Ollama__RequestTimeoutMinutes: "${OLLAMA_TIMEOUT_MINUTES:-30}"
+      # Optional steer appended to the summary instructions — host names, house style, anything.
+      Ollama__ExtraInstructions: "${OLLAMA_EXTRA_INSTRUCTIONS:-}"
 
       # The app refuses to start with auth enabled and no password configured.
       Auth__Enabled: "${AUTH_ENABLED:-true}"
@@ -53,7 +80,7 @@ services:
     volumes:
       - ./data:/data
       - ./media:/media
-    # Lets Whisper__BaseUrl use host.docker.internal on Linux hosts, where it is not
-    # resolvable by default. Harmless if you point at a real hostname or IP instead.
+    # Lets Whisper__BaseUrl and Ollama__BaseUrl use host.docker.internal on Linux hosts, where
+    # it is not resolvable by default. Harmless if you point at a real hostname or IP instead.
     extra_hosts:
       - "host.docker.internal:host-gateway"

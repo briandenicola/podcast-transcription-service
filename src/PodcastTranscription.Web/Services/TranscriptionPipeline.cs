@@ -7,6 +7,7 @@ using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services.Chunking;
 using PodcastTranscription.Web.Services.Ingest;
+using PodcastTranscription.Web.Services.Summarization;
 
 namespace PodcastTranscription.Web.Services;
 
@@ -25,6 +26,7 @@ public class TranscriptionPipeline(
     AudioProcessor audio,
     WhisperClient whisper,
     YtDlpClient ytDlp,
+    SummaryService summaries,
     IOptions<TranscriptionOptions> options,
     JobNotifier notifier,
     ILogger<TranscriptionPipeline> log)
@@ -144,6 +146,12 @@ public class TranscriptionPipeline(
             ? audioSecondsThisRun / wallClock.Elapsed.TotalSeconds
             : null;
 
+        // Saved before summarising, not after. The transcript is the thing an hour of GPU time
+        // bought; it is on disk and readable from here on whatever the language model does next.
+        await db.SaveChangesAsync(ct);
+
+        await SummarizeAsync(job, transcript, ct);
+
         job.State = JobState.Completed;
         job.Progress = 1.0;
         job.Language = transcript.Language;
@@ -158,6 +166,30 @@ public class TranscriptionPipeline(
         log.LogInformation(
             "Job {JobId} completed in {Elapsed} — {Chunks} chunks, realtime factor {Factor:N2}x",
             job.Id, wallClock.Elapsed, chunks.Count, transcript.RealtimeFactor ?? 0);
+    }
+
+    /// <summary>
+    /// Asks a local model for the episode summary, when one is configured.
+    ///
+    /// Never throws: the job is finished either way. A summary is minutes of a small model on top
+    /// of an hour of transcription, and failing the whole job — sending it back round the retry
+    /// loop to re-transcribe audio that is already done — because Ollama was down would be a
+    /// spectacularly bad trade. It is logged, and the button on the episode page runs it again.
+    /// </summary>
+    private async Task SummarizeAsync(Job job, Transcript transcript, CancellationToken ct)
+    {
+        if (!summaries.AutoSummarize)
+        {
+            return;
+        }
+
+        await SetStateAsync(job, JobState.Summarizing, ct);
+
+        var result = await summaries.SummarizeAsync(transcript.Id, ct);
+        if (!result.Success)
+        {
+            log.LogWarning("Job {JobId} finished without a summary: {Error}", job.Id, result.Error);
+        }
     }
 
     /// <summary>

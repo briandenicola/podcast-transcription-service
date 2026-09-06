@@ -12,6 +12,7 @@ using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Chunking;
 using PodcastTranscription.Web.Services.Ingest;
+using PodcastTranscription.Web.Services.Summarization;
 
 namespace PodcastTranscription.Tests;
 
@@ -75,9 +76,30 @@ public class TranscriptionPipelineTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Summarisation off by default, as it is on a host with no Ollama configured. Pass
+    /// <paramref name="ollamaOptions"/> and a handler to exercise the other path.
+    /// </summary>
+    private static SummaryService CreateSummaries(
+        AppDbContext db, OllamaOptions? ollamaOptions = null, HttpMessageHandler? ollamaHandler = null)
+    {
+        var options = ollamaOptions ?? new OllamaOptions { Enabled = false };
+        var http = new HttpClient(ollamaHandler ?? new RoutedHttpMessageHandler())
+        {
+            BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/")
+        };
+
+        var client = new OllamaClient(http, Options.Create(options), NullLogger<OllamaClient>.Instance);
+        var summarizer = new TranscriptSummarizer(
+            client, Options.Create(options), NullLogger<TranscriptSummarizer>.Instance);
+
+        return new SummaryService(
+            db, summarizer, client, Options.Create(options), NullLogger<SummaryService>.Instance);
+    }
+
     private TranscriptionPipeline CreatePipeline(
         AppDbContext db, HttpMessageHandler handler, AudioProcessor audio, TranscriptionOptions options,
-        YtDlpClient? downloader = null)
+        YtDlpClient? downloader = null, SummaryService? summaries = null)
     {
         var whisperOptions = new WhisperOptions { BaseUrl = "http://whisper.test:8080", Model = "large-v3-turbo-q5_0" };
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://whisper.test:8080/") };
@@ -90,7 +112,8 @@ public class TranscriptionPipelineTests : IDisposable
             Options.Create(new IngestOptions()),
             NullLogger<YtDlpClient>.Instance);
 
-        return new TranscriptionPipeline(db, media, audio, whisper, ytDlp, Options.Create(options),
+        return new TranscriptionPipeline(
+            db, media, audio, whisper, ytDlp, summaries ?? CreateSummaries(db), Options.Create(options),
             new JobNotifier(), NullLogger<TranscriptionPipeline>.Instance);
     }
 
@@ -478,6 +501,126 @@ public class TranscriptionPipelineTests : IDisposable
             cts.Cancel();
             return Task.FromResult(response);
         }
+    }
+
+    // ------------------------------------------------------------------ summaries --
+
+    private const string OllamaTags = """{"models":[{"name":"llama3.1:8b"}]}""";
+
+    private static OllamaOptions SummaryOptions() => new()
+    {
+        Enabled = true,
+        AutoSummarize = true,
+        BaseUrl = "http://ollama.test:11434",
+        Model = "llama3.1:8b",
+        MaxWindowChars = 12000
+    };
+
+    private static string OllamaAnswer(string text) => JsonSerializer.Serialize(new
+    {
+        model = "llama3.1:8b",
+        response = text,
+        done = true,
+        prompt_eval_count = 900,
+        eval_count = 180
+    });
+
+    [Fact]
+    public async Task A_finished_job_is_summarised_before_it_is_marked_complete()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (_, job) = await SeedAsync(db);
+
+        var ollama = new RoutedHttpMessageHandler()
+            .Always("/api/tags", OllamaTags)
+            .Always("/api/generate", OllamaAnswer("## Overview\nThey argue about rates [00:00:10]."));
+
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Rates", 0, 60)));
+
+        await CreatePipeline(
+                db, handler, new FakeAudioProcessor(300), Settings(),
+                summaries: CreateSummaries(db, SummaryOptions(), ollama))
+            .RunAsync(job.Id, CancellationToken.None);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        var summary = await verify.Summaries.SingleAsync();
+
+        Assert.Contains("They argue about rates", summary.Content);
+        Assert.Equal("llama3.1:8b", summary.Model);
+        Assert.Equal(JobState.Completed, (await verify.Jobs.SingleAsync()).State);
+    }
+
+    [Fact]
+    public async Task An_unreachable_ollama_costs_the_summary_and_nothing_else()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (_, job) = await SeedAsync(db);
+
+        // Nothing answers, so even the health check fails. By this point the transcript is an
+        // hour of GPU time already spent, and it has to survive a language model being down.
+        var ollama = new RoutedHttpMessageHandler();
+
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Rates", 0, 60)));
+
+        await CreatePipeline(
+                db, handler, new FakeAudioProcessor(300), Settings(),
+                summaries: CreateSummaries(db, SummaryOptions(), ollama))
+            .RunAsync(job.Id, CancellationToken.None);
+
+        await using var verify = new AppDbContext(_dbOptions);
+
+        Assert.Empty(verify.Summaries);
+        Assert.Equal(JobState.Completed, (await verify.Jobs.SingleAsync()).State);
+        Assert.True((await verify.Transcripts.SingleAsync()).IsComplete);
+        Assert.Single(verify.Segments);
+    }
+
+    [Fact]
+    public async Task Nothing_is_asked_of_ollama_when_summaries_are_off()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (_, job) = await SeedAsync(db);
+
+        var ollama = new RoutedHttpMessageHandler()
+            .Always("/api/tags", OllamaTags)
+            .Always("/api/generate", OllamaAnswer("never asked"));
+
+        var options = SummaryOptions();
+        options.Enabled = false;
+
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Rates", 0, 60)));
+
+        await CreatePipeline(
+                db, handler, new FakeAudioProcessor(300), Settings(),
+                summaries: CreateSummaries(db, options, ollama))
+            .RunAsync(job.Id, CancellationToken.None);
+
+        Assert.Empty(ollama.Requests);
+        Assert.Empty(db.Summaries);
+    }
+
+    [Fact]
+    public async Task AutoSummarize_off_leaves_it_to_the_button_on_the_episode_page()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (_, job) = await SeedAsync(db);
+
+        var ollama = new RoutedHttpMessageHandler()
+            .Always("/api/tags", OllamaTags)
+            .Always("/api/generate", OllamaAnswer("never asked"));
+
+        var options = SummaryOptions();
+        options.AutoSummarize = false;
+
+        var handler = new SequencedHttpMessageHandler((HttpStatusCode.OK, SentenceResponse("Rates", 0, 60)));
+
+        await CreatePipeline(
+                db, handler, new FakeAudioProcessor(300), Settings(),
+                summaries: CreateSummaries(db, options, ollama))
+            .RunAsync(job.Id, CancellationToken.None);
+
+        Assert.Empty(ollama.Requests);
+        Assert.Empty(db.Summaries);
     }
 
     private sealed class FakeHostEnvironment(string contentRoot) : IHostEnvironment
