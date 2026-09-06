@@ -13,7 +13,9 @@
 @inject DeletionService Deletion
 @inject WhisperClient Whisper
 @inject SummaryService Summaries
+@inject SummaryRunner Runner
 @inject NavigationManager Navigation
+@using Microsoft.AspNetCore.WebUtilities
 @inject IJSRuntime JS
 
 <PageTitle>@(_episode?.Title ?? "Episode")</PageTitle>
@@ -40,19 +42,23 @@ else
                     <a class="btn btn-sm" href="/delete/episode/@EpisodeId"
                        title="Delete this episode, its transcripts and its audio">Delete episode</a>
                 </div>
-                <div class="input-group">
+                <form method="post" action="/episodes/@EpisodeId/transcribe" class="input-group">
+                    <AntiforgeryToken />
                     @* Recorded against the transcript, so the back catalogue can be reprocessed
                        on a better model and the results compared. *@
-                    <input class="form-control form-control-sm" style="max-width: 14rem;"
-                           @bind="_modelOverride" placeholder="@Whisper.Model" aria-label="Model" />
-                    <button class="btn btn-primary btn-sm" @onclick="Enqueue">
+                    <input name="model" class="form-control form-control-sm" style="max-width: 14rem;"
+                           placeholder="@Whisper.Model" aria-label="Model" />
+                    <button type="submit" class="btn btn-primary btn-sm">
                         @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
                     </button>
-                </div>
+                </form>
             }
             else
             {
-                <button class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
+                <form method="post" action="/episodes/@EpisodeId/jobs/@_activeJob.Id/cancel">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-outline-secondary">Cancel</button>
+                </form>
             }
         </div>
     </div>
@@ -97,16 +103,24 @@ else
         </div>
     }
 
-    @if (_deletionMessage is not null)
+    @if (Notice is { } notice)
     {
-        <div class="alert alert-warning py-2">@_deletionMessage</div>
+        <div class="alert alert-success py-2">@notice</div>
+    }
+
+    @if (PageError is { } pageError)
+    {
+        <div class="alert alert-warning py-2">@pageError</div>
     }
 
     @if (_lastFailure is { } failure)
     {
         <div class="alert alert-danger d-flex justify-content-between align-items-center">
             <span class="job-error" title="@failure.LastError"><strong>@failure.State.</strong> @failure.LastError</span>
-            <button class="btn btn-sm btn-outline-danger" @onclick="() => Retry(failure.Id)">Retry</button>
+            <form method="post" action="/episodes/@EpisodeId/jobs/@failure.Id/retry">
+                <AntiforgeryToken />
+                <button type="submit" class="btn btn-sm btn-outline-danger">Retry</button>
+            </form>
         </div>
     }
 
@@ -122,10 +136,13 @@ else
                 @foreach (var t in _transcripts)
                 {
                     <li class="nav-item">
-                        <button class="nav-link @(t.Id == _selectedId ? "active" : "")" @onclick="() => Select(t.Id)">
+                        @* A link rather than a click handler: picking a run is navigation, and
+                           navigation works without a circuit. *@
+                        <a class="nav-link @(t.Id == Selected?.Id ? "active" : "")"
+                           href="/episodes/@EpisodeId?transcript=@t.Id">
                             @t.Model
                             <span class="small opacity-75">@t.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")</span>
-                        </button>
+                        </a>
                     </li>
                 }
             </ul>
@@ -149,33 +166,29 @@ else
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
-                    <div class="form-check form-switch mb-0"
-                         title="Turn each line into a text box so you can correct what whisper misheard. Changes save as you leave a line, and search picks them up.">
-                        <input class="form-check-input" type="checkbox" id="edit-mode"
-                               checked="@_editing" @onchange="ToggleEditing" />
-                        <label class="form-check-label small" for="edit-mode">Edit text</label>
-                    </div>
-                    @if (_transcripts.Count > 1)
+                    @* The toggles that used to sit here — Edit text, Compare runs, Word timings,
+                       Low confidence — were @onchange handlers, so they needed a live Blazor
+                       circuit and did nothing at all without one: they ticked and the page never
+                       changed. Word timings and confidence shading cost nothing to render, so
+                       they are simply always on now, and correcting a line is a link. *@
+                    @if (_editing)
                     {
-                        <div class="form-check form-switch mb-0"
-                             title="Show this transcript beside the previous run, so two models can be compared line by line.">
-                            <input class="form-check-input" type="checkbox" id="compare-mode"
-                                   checked="@_comparing" @onchange="ToggleCompare" />
-                            <label class="form-check-label small" for="compare-mode">Compare runs</label>
-                        </div>
+                        <a class="btn btn-sm" href="@ViewLink(selected.Id)">Done correcting</a>
                     }
-                    <div class="form-check form-switch mb-0"
-                         title="Show every word separately: the word being spoken highlights as the audio plays, and clicking any word jumps the player to it.">
-                        <input class="form-check-input" type="checkbox" id="show-words"
-                               checked="@_showWords" @onchange="ToggleWords" />
-                        <label class="form-check-label small" for="show-words">Word timings</label>
-                    </div>
-                    <div class="form-check form-switch mb-0"
-                         title="Shade the words whisper was least sure of, amber through red. The quickest way to find mangled names.">
-                        <input class="form-check-input" type="checkbox" id="shade-confidence"
-                               checked="@_shadeConfidence" @onchange="ToggleShading" />
-                        <label class="form-check-label small" for="shade-confidence">Low confidence</label>
-                    </div>
+                    else
+                    {
+                        <a class="btn btn-sm" href="@ViewLink(selected.Id, edit: true)"
+                           title="Turn each line into a text box so you can correct what whisper misheard">
+                            Correct text
+                        </a>
+                    }
+
+                    @* Shading every uncertain word is a lot of colour to look at all the time, so
+                       it stays opt-in — as a link rather than the checkbox it used to be. *@
+                    <a class="btn btn-sm" href="@ViewLink(selected.Id, shade: !_shading)"
+                       title="Shade the words whisper was least sure of, amber through red">
+                        @(_shading ? "Hide shading" : "Low confidence")
+                    </a>
 
                     @* Throws away one run without touching the audio, so it can be transcribed again. *@
                     <a class="btn btn-sm" href="/delete/transcript/@selected.Id?episodeId=@EpisodeId"
@@ -196,27 +209,31 @@ else
             </div>
 
             <div class="text-muted small mb-2 toolbar-hint">
-                <strong>Edit text</strong> corrects what whisper misheard ·
-                <strong>Word timings</strong> highlights each word as it plays and lets you click one to jump there ·
-                <strong>Low confidence</strong> shades the words it was unsure of
+                Each word highlights as the audio plays, and clicking one jumps the player there.
+                <strong>Low confidence</strong> shades the words whisper was least sure of, amber
+                through red — the quickest way to find a mangled name. <strong>Correct text</strong>
+                turns every line into a box you can fix, and search picks the correction up.
             </div>
 
             <SummaryCard Summary="selected.Summary"
+                         EpisodeId="EpisodeId"
+                         TranscriptId="selected.Id"
+                         Run="SummaryRun"
                          Enabled="Summaries.Enabled"
-                         Busy="_summarizing"
-                         Error="@_summaryError"
-                         ModelName="@Summaries.Model"
-                         OnSummarize="() => Summarize(selected.Id)" />
+                         ModelName="@Summaries.Model" />
 
             @if (selected.QualityWarning is { } warning)
             {
                 <div class="alert alert-warning d-flex justify-content-between align-items-center">
                     <span><strong>Possible transcription fault.</strong> @warning</span>
-                    <button class="btn btn-sm btn-outline-dark" @onclick="Enqueue">Re-transcribe</button>
+                    <form method="post" action="/episodes/@EpisodeId/transcribe">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-sm btn-outline-dark">Re-transcribe</button>
+                    </form>
                 </div>
             }
 
-            @if (_showWords && selected.Segments.All(s => string.IsNullOrEmpty(s.WordsJson)))
+            @if (selected.Segments.All(s => string.IsNullOrEmpty(s.WordsJson)))
             {
                 <div class="alert alert-secondary py-2 small">
                     This transcript has no word timings — it was produced with
@@ -232,7 +249,7 @@ else
                             <strong>@selected.Model</strong>
                             · @selected.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")
                         </div>
-                        <TranscriptView Segments="selected.Segments" Follow="_follow" />
+                        <TranscriptView Segments="selected.Segments" Follow="true" />
                     </div>
                     <div class="col-6">
                         <div class="small text-muted mb-1">
@@ -246,12 +263,14 @@ else
             }
             else
             {
+                @* Words and shading are always rendered now: they cost one span per word and
+                   they were the whole point of keeping word timings. *@
                 <TranscriptView Segments="selected.Segments"
-                                ShowWords="_showWords"
-                                ShadeConfidence="_shadeConfidence"
-                                Follow="_follow"
+                                ShowWords="true"
+                                ShadeConfidence="_shading"
+                                Follow="true"
                                 Editable="_editing"
-                                SegmentEdited="SaveSegment" />
+                                EpisodeId="EpisodeId" />
             }
         }
     }
@@ -271,30 +290,72 @@ else
 
     private Episode? _episode;
     private List<Transcript> _transcripts = [];
-    private int? _selectedId;
     private Job? _activeJob;
     private Job? _lastFailure;
     private Timer? _ticker;
-    private string? _deletionMessage;
     private bool _hasAudio;
-    private bool _showWords;
-    private bool _shadeConfidence;
-    private bool _editing;
-    private bool _comparing;
-    private bool _summarizing;
-    private string? _summaryError;
-    private string? _modelOverride;
-    private readonly bool _follow = true;
-
-    /// <summary>The next most recent transcript, which is what a comparison is against.</summary>
-    private Transcript? CompareAgainst =>
-        _transcripts.FirstOrDefault(t => t.Id != Selected?.Id);
+    private bool _playerReady;
 
     // A ?t=ms deep link from search: seek there once the player is on the page.
     private int? _pendingSeekMs;
-    private bool _playerReady;
 
-    private Transcript? Selected => _transcripts.FirstOrDefault(t => t.Id == _selectedId) ?? _transcripts.FirstOrDefault();
+    /// <summary>
+    /// Which run is shown, whether lines are editable and whether two runs sit side by side all
+    /// come from the URL rather than from component state. They used to be click handlers, which
+    /// need a live Blazor circuit — and where the circuit does not connect those controls did
+    /// nothing whatsoever. A link changes the URL, and links work everywhere.
+    /// </summary>
+    private int? SelectedId => int.TryParse(Query("transcript"), out var id) ? id : null;
+
+    private bool _editing => Query("edit") == "1";
+
+    private bool _comparing => Query("compare") == "1" && _transcripts.Count > 1;
+
+    private bool _shading => Query("shade") == "1";
+
+    /// <summary>
+    /// Builds a link to this page with the view options it should carry. Everything the toolbar
+    /// used to toggle over the circuit is a URL now, so each of these is shareable and each of
+    /// them survives a reload.
+    /// </summary>
+    private string ViewLink(int transcriptId, bool? edit = null, bool? shade = null)
+    {
+        var parts = new List<string> { $"transcript={transcriptId}" };
+
+        if (edit ?? _editing)
+        {
+            parts.Add("edit=1");
+        }
+
+        if (shade ?? _shading)
+        {
+            parts.Add("shade=1");
+        }
+
+        return $"/episodes/{EpisodeId}?" + string.Join("&", parts);
+    }
+
+    private string? Notice => Query("notice");
+
+    private string? PageError => Query("error");
+
+    private string? Query(string key) =>
+        QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query).TryGetValue(key, out var value)
+            ? value.ToString()
+            : null;
+
+    private Transcript? Selected =>
+        _transcripts.FirstOrDefault(t => t.Id == SelectedId) ?? _transcripts.FirstOrDefault();
+
+    /// <summary>The next most recent transcript, which is what a comparison is against.</summary>
+    private Transcript? CompareAgainst => _transcripts.FirstOrDefault(t => t.Id != Selected?.Id);
+
+    /// <summary>
+    /// The in-flight summarisation for the shown transcript, if any. Read straight from the
+    /// singleton so the progress bar renders correctly on a plain page load — the polling script
+    /// keeps it moving after that, again without needing a circuit.
+    /// </summary>
+    private SummaryRun? SummaryRun => Selected is { } t ? Runner.For(t.Id) : null;
 
     protected override void OnInitialized()
     {
@@ -311,8 +372,7 @@ else
 
     private void ReadSeekFromQuery()
     {
-        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
-        if (query.TryGetValue("t", out var value) && int.TryParse(value, out var ms))
+        if (int.TryParse(Query("t"), out var ms))
         {
             _pendingSeekMs = ms;
         }
@@ -337,8 +397,6 @@ else
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
-        _selectedId ??= _transcripts.FirstOrDefault()?.Id;
-
         var jobs = await db.Jobs
             .Where(j => j.EpisodeId == EpisodeId)
             .OrderByDescending(j => j.CreatedAt)
@@ -358,9 +416,8 @@ else
             return;
         }
 
-        // Re-bind after every render: toggling words replaces the elements the player tracks.
-        // The third container is the summary card, whose [hh:mm:ss] cues seek the same player.
-        // Absent until a summary exists, which the player treats as optional.
+        // Re-bind after every render: the transcript elements the player tracks are replaced
+        // whenever the page re-renders.
         await JS.InvokeVoidAsync("podcastPlayer.init", "episode-audio", "transcript-body", "summary-body");
         _playerReady = true;
 
@@ -371,138 +428,11 @@ else
         }
     }
 
-    private void Select(int transcriptId) => _selectedId = transcriptId;
-
-    private void ToggleWords(ChangeEventArgs e) => _showWords = e.Value is true;
-
-    private void ToggleEditing(ChangeEventArgs e)
-    {
-        _editing = e.Value is true;
-
-        // Editing replaces the lines with inputs, so word rendering and comparison get in the way.
-        if (_editing)
-        {
-            _showWords = false;
-            _shadeConfidence = false;
-            _comparing = false;
-        }
-    }
-
-    private void ToggleCompare(ChangeEventArgs e)
-    {
-        _comparing = e.Value is true;
-
-        if (_comparing)
-        {
-            _editing = false;
-        }
-    }
-
-    private async Task SaveSegment(Segment segment)
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var stored = await db.Segments.FirstOrDefaultAsync(s => s.Id == segment.Id);
-        if (stored is null)
-        {
-            return;
-        }
-
-        stored.Text = segment.Text;
-        stored.IsEdited = true;
-        stored.WordsJson = segment.WordsJson;
-
-        // The FTS triggers pick this up inside SQLite, so search reflects the correction with
-        // nothing extra to remember here.
-        await db.SaveChangesAsync();
-    }
-
-    private void ToggleShading(ChangeEventArgs e)
-    {
-        _shadeConfidence = e.Value is true;
-
-        // Shading is per word, so it needs the word spans rendered.
-        if (_shadeConfidence)
-        {
-            _showWords = true;
-        }
-    }
-
     private void OnJobChanged(int jobId) => InvokeAsync(async () =>
     {
         await LoadAsync();
         StateHasChanged();
     });
-
-    /// <summary>
-    /// Runs the summary on demand. Long enough to need the busy state — several minutes on a
-    /// three-hour episode — but it is a foreground action someone asked for, so it is awaited
-    /// here rather than pushed through the job queue.
-    /// </summary>
-    private async Task Summarize(int transcriptId)
-    {
-        _summarizing = true;
-        _summaryError = null;
-
-        try
-        {
-            var result = await Summaries.SummarizeAsync(transcriptId);
-            _summaryError = result.Error;
-
-            await LoadAsync();
-        }
-        finally
-        {
-            _summarizing = false;
-        }
-    }
-
-    private async Task Enqueue()
-    {
-        await Queue.EnqueueAsync(EpisodeId, model: string.IsNullOrWhiteSpace(_modelOverride) ? null : _modelOverride.Trim());
-        await LoadAsync();
-    }
-
-    private async Task Cancel()
-    {
-        if (_activeJob is { } job)
-        {
-            await Queue.CancelAsync(job.Id);
-            await LoadAsync();
-        }
-    }
-
-    private async Task Retry(int jobId)
-    {
-        await Queue.RetryAsync(jobId);
-        await LoadAsync();
-    }
-
-    private async Task DeleteTranscript(int transcriptId)
-    {
-        var result = await Deletion.DeleteTranscriptAsync(transcriptId);
-        _deletionMessage = result.Refusal;
-
-        if (result.Deleted)
-        {
-            _selectedId = null;
-        }
-
-        await LoadAsync();
-    }
-
-    private async Task DeleteEpisode()
-    {
-        var result = await Deletion.DeleteEpisodeAsync(EpisodeId);
-
-        if (result.Deleted)
-        {
-            Navigation.NavigateTo("/");
-            return;
-        }
-
-        _deletionMessage = result.Refusal;
-    }
 
     public async ValueTask DisposeAsync()
     {

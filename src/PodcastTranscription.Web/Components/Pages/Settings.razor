@@ -7,6 +7,7 @@
 @using PodcastTranscription.Web.Services.Maintenance
 @using PodcastTranscription.Web.Services.Security
 @using PodcastTranscription.Web.Services.Summarization
+@using Microsoft.AspNetCore.WebUtilities
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject WhisperClient Whisper
 @inject AdminAuthenticator Admin
@@ -17,6 +18,7 @@
 @inject IOptions<MaintenanceOptions> MaintenanceSettings
 @inject IOptions<StorageOptions> Storage
 @inject IOptions<OllamaOptions> OllamaSettings
+@inject NavigationManager Navigation
 
 <PageTitle>Settings</PageTitle>
 
@@ -43,9 +45,10 @@
                     <dt class="col-5">Word timestamps</dt><dd class="col-7">@(Transcription.Value.WordTimestamps ? "on" : "off")</dd>
                     <dt class="col-5">Max attempts</dt><dd class="col-7">@Transcription.Value.MaxAttempts</dd>
                 </dl>
-                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="CheckWhisper" disabled="@_busy">
-                    Re-check
-                </button>
+                <form method="post" action="/settings/check-whisper" class="mt-3">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Re-check</button>
+                </form>
             </div>
         </div>
 
@@ -79,9 +82,10 @@
                     </p>
                 }
 
-                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="CheckOllama" disabled="@_busy">
-                    Re-check
-                </button>
+                <form method="post" action="/settings/check-ollama" class="mt-3">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Re-check</button>
+                </form>
             </div>
         </div>
 
@@ -107,16 +111,19 @@
                     Produces a PBKDF2 hash for <code>Auth__PasswordHash</code>, so the password
                     itself never sits in a config file or an environment variable.
                 </p>
-                <div class="input-group">
-                    <input type="password" class="form-control" @bind="_passwordToHash"
-                           placeholder="New password" aria-label="Password to hash" />
-                    <button class="btn btn-outline-primary" @onclick="GenerateHash">Generate</button>
-                </div>
-                @if (_generatedHash is not null)
+                <form method="post" action="/settings/hash">
+                    <AntiforgeryToken />
+                    <div class="input-group">
+                        <input type="password" name="password" class="form-control"
+                               placeholder="New password" aria-label="Password to hash" />
+                        <button type="submit" class="btn btn-outline-primary">Generate</button>
+                    </div>
+                </form>
+                @if (GeneratedHash is { } hash)
                 {
                     <div class="mt-3">
                         <label class="form-label small">Set this as <code>Auth__PasswordHash</code>, then restart:</label>
-                        <textarea class="form-control font-monospace" rows="3" readonly>@_generatedHash</textarea>
+                        <textarea class="form-control font-monospace" rows="3" readonly>@hash</textarea>
                     </div>
                 }
             </div>
@@ -159,9 +166,10 @@
                         to prune source audio once an episode has a finished transcript.
                     </p>
                 }
-                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="RunRetention" disabled="@_busy">
-                    Run retention now
-                </button>
+                <form method="post" action="/settings/retention" class="mt-3">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Run retention now</button>
+                </form>
             </div>
         </div>
 
@@ -190,17 +198,18 @@
                     </ul>
                 }
 
-                <button class="btn btn-sm btn-outline-secondary" @onclick="RunBackup" disabled="@_busy">
-                    Back up now
-                </button>
+                <form method="post" action="/settings/backup">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Back up now</button>
+                </form>
             </div>
         </div>
     </div>
 </div>
 
-@if (_message is not null)
+@if (Message is { } message)
 {
-    <div class="alert @(_failed ? "alert-danger" : "alert-success") mt-4">@_message</div>
+    <div class="alert @(Failed ? "alert-danger" : "alert-success") mt-4">@message</div>
 }
 
 @code {
@@ -238,8 +247,6 @@
     };
 
     private bool _busy;
-    private bool _failed;
-    private string? _message;
 
     private int _episodeCount;
     private int _transcriptCount;
@@ -248,8 +255,21 @@
     private long _preparedBytes;
     private List<FileInfo> _backups = [];
 
-    private string? _passwordToHash;
-    private string? _generatedHash;
+    /// <summary>
+    /// Outcomes arrive in the query string rather than in component state, because the actions
+    /// that produce them are form posts that redirect back here — see ActionEndpoints for why
+    /// they are not @onclick handlers. It also means the result survives a refresh.
+    /// </summary>
+    private string? Message => Query("notice") ?? Query("error");
+
+    private bool Failed => Query("error") is not null;
+
+    private string? GeneratedHash => Query("hash");
+
+    private string? Query(string key) =>
+        QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query).TryGetValue(key, out var value)
+            ? value.ToString()
+            : null;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -265,104 +285,5 @@
         _backups = Maintenance.ListBackups();
         _whisperHealth = await Whisper.CheckHealthAsync();
         _ollamaHealth = await Ollama.CheckHealthAsync();
-    }
-
-    private async Task CheckWhisper()
-    {
-        _busy = true;
-        try
-        {
-            _whisperHealth = await Whisper.CheckHealthAsync();
-            _failed = !_whisperHealth.Reachable;
-            _message = _whisperHealth switch
-            {
-                { Ready: true } => $"{Whisper.Endpoint} answered.",
-                { ModelLoading: true } => $"{Whisper.Endpoint} is still loading its model.",
-                _ => $"{Whisper.Endpoint} did not answer."
-            };
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task CheckOllama()
-    {
-        _busy = true;
-        try
-        {
-            _ollamaHealth = await Ollama.CheckHealthAsync();
-            _failed = !_ollamaHealth.Ready;
-            _message = _ollamaHealth switch
-            {
-                { Ready: true } => $"{Ollama.Endpoint} answered and has {Ollama.Model}.",
-                { Reachable: true } => $"{Ollama.Endpoint} answered, but {_ollamaHealth.Status}.",
-                _ when !OllamaSettings.Value.Enabled =>
-                    "Summaries are off. Set Ollama__Enabled=true (OLLAMA_ENABLED in .env) and restart.",
-                _ => $"{Ollama.Endpoint} did not answer."
-            };
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private void GenerateHash()
-    {
-        if (string.IsNullOrWhiteSpace(_passwordToHash))
-        {
-            return;
-        }
-
-        _generatedHash = PasswordHasher.Hash(_passwordToHash);
-        _passwordToHash = null;
-    }
-
-    private async Task RunRetention()
-    {
-        _busy = true;
-        try
-        {
-            var result = await Maintenance.PruneSourceAudioAsync();
-            _failed = false;
-            _message = result.EpisodesPruned == 0
-                ? "Nothing eligible to prune."
-                : $"Pruned {result.EpisodesPruned} source file(s), freeing {TimeFormat.Size(result.BytesFreed)}.";
-
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            _failed = true;
-            _message = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task RunBackup()
-    {
-        _busy = true;
-        try
-        {
-            var result = await Maintenance.BackupDatabaseAsync();
-            _failed = false;
-            _message = $"Backed up to {Path.GetFileName(result.Path)} ({TimeFormat.Size(result.Bytes)}).";
-
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            _failed = true;
-            _message = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
     }
 }

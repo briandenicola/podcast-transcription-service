@@ -30,7 +30,8 @@ public class SummaryService(
     public string Model => ollama.Model;
     public bool AutoSummarize => _options.Enabled && _options.AutoSummarize;
 
-    public async Task<SummaryResult> SummarizeAsync(int transcriptId, CancellationToken ct = default)
+    public async Task<SummaryResult> SummarizeAsync(
+        int transcriptId, IProgress<SummaryProgress>? progress = null, CancellationToken ct = default)
     {
         if (!_options.Enabled)
         {
@@ -74,6 +75,7 @@ public class SummaryService(
                 transcript.Episode?.Title ?? "Untitled episode",
                 transcript.Episode?.Show,
                 segments,
+                progress,
                 ct);
 
             var summary = await db.Summaries.FirstOrDefaultAsync(s => s.TranscriptId == transcriptId, ct);

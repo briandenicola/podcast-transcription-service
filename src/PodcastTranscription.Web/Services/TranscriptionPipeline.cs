@@ -185,7 +185,7 @@ public class TranscriptionPipeline(
 
         await SetStateAsync(job, JobState.Summarizing, ct);
 
-        var result = await summaries.SummarizeAsync(transcript.Id, ct);
+        var result = await summaries.SummarizeAsync(transcript.Id, progress: null, ct);
         if (!result.Success)
         {
             log.LogWarning("Job {JobId} finished without a summary: {Error}", job.Id, result.Error);

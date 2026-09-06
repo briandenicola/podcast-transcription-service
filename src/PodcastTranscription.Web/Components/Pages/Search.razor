@@ -10,11 +10,11 @@
 
 <div class="row mb-4">
     <div class="col-lg-8">
-        <div class="input-group">
-            <input class="form-control" placeholder="Search every transcript…" @bind="_query"
-                   @bind:event="oninput" @onkeydown="OnKeyDown" aria-label="Search transcripts" />
-            <button class="btn btn-primary" @onclick="RunSearch" disabled="@_searching">Search</button>
-        </div>
+        <form method="get" action="/search" class="input-group">
+            <input class="form-control" name="q" value="@_query"
+                   placeholder="Search every transcript…" aria-label="Search transcripts" />
+            <button type="submit" class="btn btn-primary">Search</button>
+        </form>
         <div class="form-text">
             Words are combined with AND, and the last one matches as a prefix.
             Wrap a phrase in quotes to keep it together.
@@ -22,11 +22,7 @@
     </div>
 </div>
 
-@if (_searching)
-{
-    <p class="text-muted">Searching…</p>
-}
-else if (_results is { } results)
+@if (_results is { } results)
 {
     @if (results.TotalHits == 0)
     {
@@ -69,44 +65,17 @@ else if (_results is { } results)
 @code {
     private string? _query;
     private SearchResults? _results;
-    private bool _searching;
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>
+    /// Driven entirely by <c>?q=</c>. The search box is a GET form rather than a click handler,
+    /// so it needs no Blazor circuit, and every result is a URL that can be shared or reloaded.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
     {
         var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
-        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
 
-        if (q.TryGetValue("q", out var value) && !string.IsNullOrWhiteSpace(value))
-        {
-            _query = value!;
-            await RunSearch();
-        }
-    }
-
-    private async Task OnKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await RunSearch();
-        }
-    }
-
-    private async Task RunSearch()
-    {
-        if (string.IsNullOrWhiteSpace(_query))
-        {
-            _results = null;
-            return;
-        }
-
-        _searching = true;
-        try
-        {
-            _results = await Finder.SearchAsync(_query);
-        }
-        finally
-        {
-            _searching = false;
-        }
+        _query = query.TryGetValue("q", out var value) ? value.ToString() : null;
+        _results = string.IsNullOrWhiteSpace(_query) ? null : await Finder.SearchAsync(_query);
     }
 }
