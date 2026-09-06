@@ -130,6 +130,7 @@ public class DeletionService(AppDbContext db, MediaStore media, RunningJobs runn
 
         await db.Segments.Where(s => transcriptIds.Contains(s.TranscriptId)).ExecuteDeleteAsync(ct);
         await db.TranscriptChunks.Where(c => transcriptIds.Contains(c.TranscriptId)).ExecuteDeleteAsync(ct);
+        await db.Summaries.Where(s => transcriptIds.Contains(s.TranscriptId)).ExecuteDeleteAsync(ct);
 
         // Jobs outlive the transcript they produced, so the reference is cleared rather than
         // taking the job history with it.

@@ -5,7 +5,7 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    padding: 4px 4px 0;
+    padding: var(--w95-gap-xs) var(--w95-gap-xs) 0;
     background: #008080;
     overflow: hidden;
 }
@@ -27,30 +27,30 @@
 .title-bar {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 2px 2px 2px 3px;
+    gap: var(--w95-gap-sm);
+    padding: var(--w95-titlebar-pad-y) var(--w95-titlebar-pad-x);
     background: linear-gradient(90deg, #000080, #1084d0);
     color: #fff;
     font-weight: bold;
-    font-size: 12px;
+    font-size: var(--w95-text-size);
     flex: 0 0 auto;
 }
 
 .title-bar-text { flex: 1 1 auto; }
 
-.title-bar-icon { font-size: 12px; }
+.title-bar-icon { font-size: var(--w95-h4); }
 
 /* Decorative: a real window's buttons, with no window manager behind them. */
 .title-bar-controls { display: flex; gap: 2px; }
 
 .title-bar-controls span {
-    width: 16px;
-    height: 14px;
+    width: 20px;
+    height: 18px;
     background: #c0c0c0;
     color: #000;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: bold;
-    line-height: 12px;
+    line-height: 16px;
     text-align: center;
     box-shadow:
         inset -1px -1px #0a0a0a,
@@ -68,9 +68,9 @@
 }
 
 .sidebar {
-    flex: 0 0 150px;
+    flex: 0 0 186px;
     background: #c0c0c0;
-    padding: 3px;
+    padding: var(--w95-gap-xs);
     overflow-y: auto;
     box-shadow:
         inset -1px -1px #ffffff,
@@ -92,9 +92,9 @@ main {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 3px 6px;
-    font-size: 11px;
+    gap: var(--w95-gap-lg);
+    padding: var(--w95-gap-sm) var(--w95-gap);
+    font-size: var(--w95-text-size-sm);
     background: #c0c0c0;
     box-shadow:
         inset -1px -1px #0a0a0a,
@@ -106,7 +106,7 @@ main {
 .content {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 10px 12px;
+    padding: var(--w95-gap-lg) 20px;
     background: #c0c0c0;
     min-height: 0;
 }
@@ -115,13 +115,13 @@ main {
 .status-bar {
     flex: 0 0 auto;
     display: flex;
-    gap: 2px;
+    gap: 3px;
     margin-top: 3px;
-    font-size: 11px;
+    font-size: var(--w95-text-size-sm);
 }
 
 .status-bar-field {
-    padding: 2px 5px;
+    padding: var(--w95-gap-xs) var(--w95-gap);
     background: #c0c0c0;
     box-shadow:
         inset -1px -1px #ffffff,
@@ -135,10 +135,10 @@ main {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 30px;
-    margin: 3px -4px 0;
-    padding: 3px 4px;
+    gap: var(--w95-gap-sm);
+    height: 38px;
+    margin: 3px calc(-1 * var(--w95-gap-xs)) 0;
+    padding: var(--w95-gap-xs) var(--w95-gap-sm);
     background: #c0c0c0;
     box-shadow: inset 0 1px #ffffff, inset 0 2px #dfdfdf;
 }
@@ -146,9 +146,9 @@ main {
 .start-button {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 7px 2px 4px;
-    font-size: 12px;
+    gap: var(--w95-gap-sm);
+    padding: var(--w95-gap-xs) var(--w95-gap) var(--w95-gap-xs) var(--w95-gap-sm);
+    font-size: var(--w95-text-size);
     font-weight: bold;
     background: #c0c0c0;
     color: #000;
@@ -172,12 +172,12 @@ main {
 
 .start-flag {
     display: inline-block;
-    width: 14px;
-    height: 13px;
+    width: 17px;
+    height: 16px;
     /* The four-pane flag, drawn rather than fetched. */
     background:
-        linear-gradient(#ff3b30 50%, #ffcc00 50%) left / 6px 100% no-repeat,
-        linear-gradient(#34c759 50%, #0a84ff 50%) right / 6px 100% no-repeat;
+        linear-gradient(#ff3b30 50%, #ffcc00 50%) left / 7px 100% no-repeat,
+        linear-gradient(#34c759 50%, #0a84ff 50%) right / 7px 100% no-repeat;
     transform: skewX(-8deg);
 }
 
@@ -186,9 +186,9 @@ main {
 .taskbar-tray {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
-    font-size: 11px;
+    gap: var(--w95-gap);
+    padding: var(--w95-gap-xs) var(--w95-gap);
+    font-size: var(--w95-text-size-sm);
     box-shadow:
         inset -1px -1px #ffffff,
         inset 1px 1px #808080;

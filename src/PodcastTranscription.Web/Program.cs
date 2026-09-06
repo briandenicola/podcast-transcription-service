@@ -8,6 +8,7 @@ using PodcastTranscription.Web.Services.Ingest;
 using PodcastTranscription.Web.Services.Maintenance;
 using PodcastTranscription.Web.Services.Search;
 using PodcastTranscription.Web.Services.Security;
+using PodcastTranscription.Web.Services.Summarization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
@@ -42,6 +43,7 @@ builder.Services.Configure<TranscriptionOptions>(builder.Configuration.GetSectio
 builder.Services.Configure<IngestOptions>(builder.Configuration.GetSection(IngestOptions.SectionName));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<MaintenanceOptions>(builder.Configuration.GetSection(MaintenanceOptions.SectionName));
+builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection(OllamaOptions.SectionName));
 
 var storage = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var dataDirectory = Path.IsPathRooted(storage.DataPath)
@@ -77,6 +79,16 @@ builder.Services.AddHttpClient<WhisperClient>(client =>
     client.Timeout = TimeSpan.FromMinutes(whisper.RequestTimeoutMinutes);
 });
 
+var ollama = builder.Configuration.GetSection(OllamaOptions.SectionName).Get<OllamaOptions>() ?? new OllamaOptions();
+builder.Services.AddHttpClient<OllamaClient>(client =>
+{
+    client.BaseAddress = new Uri(ollama.BaseUrl.TrimEnd('/') + "/");
+
+    // A long episode is several generate calls in a row, and a model running on CPU takes
+    // minutes over each one. The 100 second default abandons all of them.
+    client.Timeout = TimeSpan.FromMinutes(ollama.RequestTimeoutMinutes);
+});
+
 builder.Services.AddSingleton<AdminAuthenticator>();
 
 builder.Services.AddScoped<MediaStore>();
@@ -90,6 +102,8 @@ builder.Services.AddScoped<YtDlpClient>();
 builder.Services.AddScoped<FeedService>();
 builder.Services.AddScoped<PodcastUrlResolver>();
 builder.Services.AddScoped<MaintenanceService>();
+builder.Services.AddScoped<TranscriptSummarizer>();
+builder.Services.AddScoped<SummaryService>();
 builder.Services.AddHttpClient(nameof(FeedService));
 
 // Shared across circuits and the worker, so both sides see the same running jobs and the same

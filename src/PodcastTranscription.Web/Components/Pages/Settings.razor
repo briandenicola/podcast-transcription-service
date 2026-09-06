@@ -6,14 +6,17 @@
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Maintenance
 @using PodcastTranscription.Web.Services.Security
+@using PodcastTranscription.Web.Services.Summarization
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject WhisperClient Whisper
 @inject AdminAuthenticator Admin
 @inject MaintenanceService Maintenance
+@inject OllamaClient Ollama
 @inject IOptions<TranscriptionOptions> Transcription
 @inject IOptions<IngestOptions> Ingest
 @inject IOptions<MaintenanceOptions> MaintenanceSettings
 @inject IOptions<StorageOptions> Storage
+@inject IOptions<OllamaOptions> OllamaSettings
 
 <PageTitle>Settings</PageTitle>
 
@@ -41,6 +44,42 @@
                     <dt class="col-5">Max attempts</dt><dd class="col-7">@Transcription.Value.MaxAttempts</dd>
                 </dl>
                 <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="CheckWhisper" disabled="@_busy">
+                    Re-check
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+                <span>Ollama (summaries)</span>
+                <span class="badge @OllamaBadgeClass">@OllamaStatusText</span>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Endpoint</dt><dd class="col-7"><code>@Ollama.Endpoint</code></dd>
+                    <dt class="col-5">Model</dt><dd class="col-7">@Ollama.Model</dd>
+                    <dt class="col-5">Summaries</dt>
+                    <dd class="col-7">@(OllamaSettings.Value.Enabled ? "enabled" : "disabled (no Ollama:Enabled)")</dd>
+                    <dt class="col-5">After each job</dt>
+                    <dd class="col-7">@(OllamaSettings.Value.AutoSummarize ? "summarise automatically" : "on request only")</dd>
+                    <dt class="col-5">Context</dt><dd class="col-7">@OllamaSettings.Value.ContextTokens.ToString("N0") tokens</dd>
+                    <dt class="col-5">Window</dt>
+                    <dd class="col-7">@OllamaSettings.Value.MaxWindowChars.ToString("N0") chars per pass</dd>
+                </dl>
+
+                @if (_ollamaHealth is { Reachable: true, ModelAvailable: false })
+                {
+                    <p class="small text-muted mt-2 mb-0">
+                        The server is up but does not have <code>@Ollama.Model</code>. Run
+                        <code>ollama pull @Ollama.Model</code> on that host.
+                        @if (_ollamaHealth.Models.Count > 0)
+                        {
+                            <span>It does have: @string.Join(", ", _ollamaHealth.Models.Take(8)).</span>
+                        }
+                    </p>
+                }
+
+                <button class="btn btn-sm btn-outline-secondary mt-3" @onclick="CheckOllama" disabled="@_busy">
                     Re-check
                 </button>
             </div>
@@ -180,6 +219,24 @@
         { ModelLoading: true } => "loading model",
         _ => "unreachable"
     };
+    private OllamaHealth? _ollamaHealth;
+
+    private string OllamaBadgeClass => _ollamaHealth switch
+    {
+        { Ready: true } => "bg-success",
+        { Reachable: true } => "bg-warning text-dark",
+        _ when !OllamaSettings.Value.Enabled => "bg-secondary",
+        _ => "bg-danger"
+    };
+
+    private string OllamaStatusText => _ollamaHealth switch
+    {
+        { Ready: true } => "reachable",
+        { Reachable: true } => "model missing",
+        _ when !OllamaSettings.Value.Enabled => "off",
+        _ => "unreachable"
+    };
+
     private bool _busy;
     private bool _failed;
     private string? _message;
@@ -207,6 +264,7 @@
         (_sourceBytes, _preparedBytes) = Maintenance.MeasureMediaUsage();
         _backups = Maintenance.ListBackups();
         _whisperHealth = await Whisper.CheckHealthAsync();
+        _ollamaHealth = await Ollama.CheckHealthAsync();
     }
 
     private async Task CheckWhisper()
@@ -221,6 +279,28 @@
                 { Ready: true } => $"{Whisper.Endpoint} answered.",
                 { ModelLoading: true } => $"{Whisper.Endpoint} is still loading its model.",
                 _ => $"{Whisper.Endpoint} did not answer."
+            };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CheckOllama()
+    {
+        _busy = true;
+        try
+        {
+            _ollamaHealth = await Ollama.CheckHealthAsync();
+            _failed = !_ollamaHealth.Ready;
+            _message = _ollamaHealth switch
+            {
+                { Ready: true } => $"{Ollama.Endpoint} answered and has {Ollama.Model}.",
+                { Reachable: true } => $"{Ollama.Endpoint} answered, but {_ollamaHealth.Status}.",
+                _ when !OllamaSettings.Value.Enabled =>
+                    "Summaries are off. Set Ollama__Enabled=true (OLLAMA_ENABLED in .env) and restart.",
+                _ => $"{Ollama.Endpoint} did not answer."
             };
         }
         finally

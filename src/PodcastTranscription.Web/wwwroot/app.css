@@ -29,6 +29,43 @@
 
     --w95-font: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Geneva, Verdana, sans-serif;
     --w95-mono: "Lucida Console", "Courier New", monospace;
+
+    /* ---------------------------------------------------------- type scale --
+       Win95 drew everything at 8pt, which on a 2025 display is a squint. These
+       are the same proportions one notch up: still the same theme, just legible
+       without leaning in. Every font-size below picks from here rather than
+       hardcoding, so the whole app rescales by editing these four values. */
+    --w95-text-size: 14px;
+    --w95-text-size-sm: 12px;
+    --w95-text-size-xs: 11px;
+    --w95-mono-size: 13px;
+
+    --w95-h1: 20px;
+    --w95-h2: 18px;
+    --w95-h3: 16px;
+    --w95-h4: 15px;
+
+    /* ------------------------------------------------------- spacing scale --
+       Four steps, used for gaps and margins. Control padding gets its own
+       tokens below because buttons, fields and table rows each want a
+       different ratio of vertical to horizontal. */
+    --w95-gap-xs: 4px;
+    --w95-gap-sm: 6px;
+    --w95-gap: 10px;
+    --w95-gap-lg: 16px;
+
+    --w95-btn-pad-y: 6px;
+    --w95-btn-pad-x: 16px;
+    --w95-field-pad-y: 5px;
+    --w95-field-pad-x: 8px;
+    --w95-row-pad-y: 7px;
+    --w95-row-pad-x: 10px;
+
+    /* The bevel is still 2px at every size — that is what keeps it Win95 rather
+       than a grey flat theme — so chrome heights are tokens, not multiples. */
+    --w95-titlebar-pad-y: 4px;
+    --w95-titlebar-pad-x: 6px;
+    --w95-scrollbar: 19px;
 }
 
 /* Raised, like a button at rest or a window frame. */
@@ -76,7 +113,8 @@ body {
     background: var(--w95-desktop);
     color: var(--w95-text);
     font-family: var(--w95-font);
-    font-size: 12px;
+    font-size: var(--w95-text-size);
+    line-height: 1.45;
     /* Win95 had no antialiasing. Turning it off is most of the feel. */
     -webkit-font-smoothing: none;
     -moz-osx-font-smoothing: unset;
@@ -88,10 +126,23 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: 0;
 }
 
-h1 { font-size: 17px; }
-h2 { font-size: 15px; }
-h3, .h3 { font-size: 14px; }
-h4, .h4, h5, .h5 { font-size: 13px; }
+h1, h2, h3, h4, h5, h6 { margin-bottom: var(--w95-gap-sm); }
+
+h1, .h1 { font-size: var(--w95-h1); }
+h2, .h2 { font-size: var(--w95-h2); }
+h3, .h3 { font-size: var(--w95-h3); }
+h4, .h4, h5, .h5 { font-size: var(--w95-h4); }
+
+/* Bootstrap's .small is used all over the pages for secondary text. Left at its
+   own 0.875em it lands under 12px, which is the tightness we are getting rid of. */
+small, .small { font-size: var(--w95-text-size-sm); }
+
+/* Blazor's FocusOnNavigate moves focus to the page heading after every navigation, so a
+   screen reader lands on the new page rather than back at the top of the document. The heading
+   is not interactive and carries tabindex="-1", so nobody can tab to it deliberately and the
+   browser's ring on it reads as a stray box drawn around the title. */
+h1[tabindex="-1"]:focus,
+h2[tabindex="-1"]:focus { outline: none; }
 
 a {
     color: #000080;
@@ -102,7 +153,7 @@ a:hover { color: #1084d0; }
 
 code, .font-monospace, pre {
     font-family: var(--w95-mono);
-    font-size: 11px;
+    font-size: var(--w95-mono-size);
     color: #000080;
     background: transparent;
 }
@@ -115,15 +166,15 @@ code, .font-monospace, pre {
     background: var(--w95-surface);
     color: var(--w95-text);
     font-family: var(--w95-font);
-    font-size: 12px;
-    padding: 3px 12px;
-    min-width: 70px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-btn-pad-y) var(--w95-btn-pad-x);
+    min-width: 84px;
     line-height: 1.2;
 }
 
 .btn-sm {
-    font-size: 11px;
-    padding: 2px 8px;
+    font-size: var(--w95-text-size-sm);
+    padding: 4px 11px;
     min-width: 0;
 }
 
@@ -152,10 +203,12 @@ code, .font-monospace, pre {
         inset -2px -2px var(--w95-face-light),
         inset 2px 2px var(--w95-shadow);
     /* The label shifts a pixel down-right, as though the button really moved. */
-    padding: 4px 11px 2px 13px;
+    padding:
+        calc(var(--w95-btn-pad-y) + 1px) calc(var(--w95-btn-pad-x) - 1px)
+        calc(var(--w95-btn-pad-y) - 1px) calc(var(--w95-btn-pad-x) + 1px);
 }
 
-.btn-sm:active:not(:disabled) { padding: 3px 7px 1px 9px; }
+.btn-sm:active:not(:disabled) { padding: 5px 10px 3px 12px; }
 
 .btn:focus-visible {
     outline: 1px dotted var(--w95-text);
@@ -193,8 +246,8 @@ textarea {
     background: var(--w95-field);
     color: var(--w95-text);
     font-family: var(--w95-font);
-    font-size: 12px;
-    padding: 3px 4px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-field-pad-y) var(--w95-field-pad-x);
 }
 
 .form-control:focus,
@@ -212,21 +265,21 @@ textarea:focus {
 
 .form-select {
     background-image: none;
-    padding-right: 4px;
+    padding-right: var(--w95-field-pad-x);
 }
 
 .form-label {
-    font-size: 12px;
-    margin-bottom: 2px;
+    font-size: var(--w95-text-size);
+    margin-bottom: var(--w95-gap-xs);
 }
 
 .form-text {
-    font-size: 11px;
+    font-size: var(--w95-text-size-sm);
     color: #3f3f3f;
 }
 
 .input-group > .form-control,
-.input-group > .form-select { margin-right: 3px; }
+.input-group > .form-select { margin-right: var(--w95-gap-xs); }
 
 ::selection {
     background: var(--w95-selection);
@@ -236,8 +289,8 @@ textarea:focus {
 /* Checkboxes and switches become square Win95 checkboxes. */
 .form-check-input {
     appearance: none;
-    width: 13px;
-    height: 13px;
+    width: 15px;
+    height: 15px;
     background: var(--w95-field);
     border-radius: 0 !important;
     border: none;
@@ -250,32 +303,32 @@ textarea:focus {
 }
 
 .form-switch .form-check-input {
-    width: 13px;
+    width: 15px;
     margin-left: 0;
     background-image: none;
 }
 
-.form-switch { padding-left: 1.4em; }
+.form-switch { padding-left: 1.6em; }
 
 .form-check-input:checked {
     background: var(--w95-field);
     /* The tick is drawn rather than loaded, so nothing external is needed. */
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'%3E%3Cpath d='M3 6.5 L5.5 9 L10 3.5' stroke='black' stroke-width='2' fill='none'/%3E%3C/svg%3E");
-    background-size: 13px 13px;
+    background-size: 15px 15px;
     background-position: center;
     background-repeat: no-repeat;
 }
 
 .form-check-input:focus { box-shadow: inset -1px -1px var(--w95-light), inset 1px 1px var(--w95-shadow), inset -2px -2px var(--w95-face-light), inset 2px 2px var(--w95-dark); }
 
-.form-check-label { font-size: 12px; }
+.form-check-label { font-size: var(--w95-text-size); }
 
 /* ----------------------------------------------------------------- tables -- */
 
 .table {
     background: var(--w95-field);
     color: var(--w95-text);
-    font-size: 12px;
+    font-size: var(--w95-text-size);
     margin-bottom: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -285,8 +338,8 @@ textarea:focus {
 .table > thead > tr > th {
     background: var(--w95-surface);
     font-weight: normal;
-    font-size: 11px;
-    padding: 3px 6px;
+    font-size: var(--w95-text-size-sm);
+    padding: var(--w95-row-pad-y) var(--w95-row-pad-x);
     border: none;
     box-shadow:
         inset -1px -1px var(--w95-dark),
@@ -297,13 +350,13 @@ textarea:focus {
 
 .table > tbody > tr > td {
     border-bottom: 1px solid #e4e4e4;
-    padding: 4px 6px;
+    padding: var(--w95-row-pad-y) var(--w95-row-pad-x);
     background: var(--w95-field);
 }
 
 .table > tbody > tr:hover > td { background: #eaeaea; }
 
-.table-wrap { background: var(--w95-field); padding: 2px; }
+.table-wrap { background: var(--w95-field); padding: 3px; }
 
 /* ------------------------------------------------------- cards and alerts -- */
 
@@ -316,12 +369,12 @@ textarea:focus {
     background: var(--w95-surface);
     border: none;
     border-bottom: 1px solid var(--w95-shadow);
-    font-size: 12px;
+    font-size: var(--w95-text-size);
     font-weight: bold;
-    padding: 4px 8px;
+    padding: var(--w95-gap-sm) var(--w95-gap);
 }
 
-.card-body { padding: 8px; }
+.card-body { padding: var(--w95-gap-lg); }
 
 /* Alerts read as message boxes: grey, bevelled, with an icon. */
 .alert {
@@ -329,8 +382,8 @@ textarea:focus {
     color: var(--w95-text);
     border: none;
     border-radius: 0;
-    font-size: 12px;
-    padding: 8px 10px 8px 34px;
+    font-size: var(--w95-text-size);
+    padding: 12px 14px 12px 42px;
     position: relative;
     box-shadow:
         inset -1px -1px var(--w95-dark),
@@ -341,9 +394,9 @@ textarea:focus {
 
 .alert::before {
     position: absolute;
-    left: 9px;
-    top: 7px;
-    font-size: 15px;
+    left: 13px;
+    top: 11px;
+    font-size: 18px;
     font-weight: bold;
     line-height: 1;
     font-family: var(--w95-font);
@@ -361,9 +414,9 @@ textarea:focus {
     background: var(--w95-surface) !important;
     color: var(--w95-text) !important;
     font-family: var(--w95-font);
-    font-size: 10px;
+    font-size: var(--w95-text-size-sm);
     font-weight: normal;
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: 0;
 }
 
@@ -381,8 +434,8 @@ textarea:focus {
 .progress {
     background: var(--w95-surface);
     border-radius: 0;
-    height: 18px !important;
-    padding: 2px;
+    height: 22px !important;
+    padding: 3px;
     box-shadow:
         inset -1px -1px var(--w95-light),
         inset 1px 1px var(--w95-shadow),
@@ -420,8 +473,8 @@ textarea:focus {
 .nav-pills .nav-link {
     background: var(--w95-surface);
     color: var(--w95-text);
-    font-size: 12px;
-    padding: 3px 10px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-gap-sm) var(--w95-gap-lg);
     border-radius: 0;
     margin-bottom: -1px;
 }
@@ -431,20 +484,20 @@ textarea:focus {
     background: var(--w95-surface) !important;
     color: var(--w95-text) !important;
     font-weight: bold;
-    padding-bottom: 5px;
+    padding-bottom: calc(var(--w95-gap-sm) + 2px);
 }
 
 /* ------------------------------------------------------------ list group -- */
 
-.list-group { background: var(--w95-field); padding: 2px; }
+.list-group { background: var(--w95-field); padding: 3px; }
 
 .list-group-item {
     background: var(--w95-field);
     color: var(--w95-text);
     border: none;
     border-radius: 0 !important;
-    font-size: 12px;
-    padding: 4px 6px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-row-pad-y) var(--w95-row-pad-x);
 }
 
 .list-group-item-action:hover { background: #eaeaea; }
@@ -456,8 +509,8 @@ textarea:focus {
 .page-link {
     background: var(--w95-surface);
     color: var(--w95-text);
-    font-size: 11px;
-    padding: 2px 8px;
+    font-size: var(--w95-text-size-sm);
+    padding: var(--w95-gap-xs) var(--w95-gap);
     border-radius: 0;
 }
 
@@ -474,15 +527,15 @@ textarea:focus {
 .transcript {
     max-width: none;
     background: var(--w95-field);
-    padding: 4px;
+    padding: var(--w95-gap-sm);
     max-height: 60vh;
     overflow-y: auto;
 }
 
 .transcript-line {
     display: flex;
-    gap: 0.75rem;
-    padding: 2px 4px;
+    gap: 1rem;
+    padding: var(--w95-gap-xs) var(--w95-gap-sm);
     align-items: baseline;
     border-radius: 0;
 }
@@ -490,9 +543,9 @@ textarea:focus {
 .transcript-line:hover { background: #eaeaea; }
 
 .transcript-time {
-    flex: 0 0 4.5rem;
+    flex: 0 0 5.25rem;
     font-family: var(--w95-mono);
-    font-size: 11px;
+    font-size: var(--w95-mono-size);
     text-align: right;
     user-select: none;
     color: #000080;
@@ -500,8 +553,8 @@ textarea:focus {
 
 .transcript-text {
     flex: 1 1 auto;
-    line-height: 1.5;
-    font-size: 12px;
+    line-height: 1.65;
+    font-size: var(--w95-text-size);
 }
 
 /* Selection highlight, exactly as a list view marks the current row. */
@@ -516,7 +569,7 @@ textarea:focus {
 
 .transcript-line.is-edited .transcript-time { color: #800080; }
 
-.transcript .w { border-radius: 0; padding: 0 1px; }
+.transcript .w { border-radius: 0; padding: 0 2px; }
 
 .transcript .w.is-active-word {
     background: #1084d0;
@@ -526,13 +579,13 @@ textarea:focus {
 .transcript.shade-confidence .w.conf-mid { background: #ffe9a0; }
 .transcript.shade-confidence .w.conf-low { background: #ffb0b0; }
 
-.compare .transcript { font-size: 11px; max-height: 50vh; }
+.compare .transcript { font-size: var(--w95-text-size-sm); max-height: 50vh; }
 
 .toolbar-hint {
     border-left: none;
     background: var(--w95-surface);
-    padding: 4px 6px;
-    font-size: 11px;
+    padding: var(--w95-gap-sm) var(--w95-gap);
+    font-size: var(--w95-text-size-sm);
     box-shadow:
         inset -1px -1px var(--w95-dark),
         inset 1px 1px var(--w95-light),
@@ -540,24 +593,121 @@ textarea:focus {
         inset 2px 2px var(--w95-face-light);
 }
 
-.export-links .btn { margin-left: 2px; }
+.export-links .btn { margin-left: var(--w95-gap-xs); }
+
+/* =============================================================== summary == */
+
+/* Presented as its own little window, because that is what it is: a second
+   document about the episode, sitting above the transcript rather than inside it. */
+.summary-card {
+    background: var(--w95-surface);
+    padding: 3px;
+    margin-bottom: var(--w95-gap-lg);
+    box-shadow:
+        inset -1px -1px var(--w95-dark),
+        inset 1px 1px var(--w95-light),
+        inset -2px -2px var(--w95-shadow),
+        inset 2px 2px var(--w95-face-light);
+}
+
+.summary-titlebar {
+    display: flex;
+    align-items: center;
+    gap: var(--w95-gap-sm);
+    padding: var(--w95-titlebar-pad-y) var(--w95-titlebar-pad-x);
+    background: linear-gradient(90deg, var(--w95-title-active-from), var(--w95-title-active-to));
+    color: #fff;
+    font-size: var(--w95-text-size);
+}
+
+.summary-title { font-weight: bold; }
+
+.summary-meta {
+    font-size: var(--w95-text-size-sm);
+    color: #c8d8f0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.summary-actions {
+    margin-left: auto;
+    display: flex;
+    gap: var(--w95-gap-xs);
+    flex: 0 0 auto;
+}
+
+.summary-body { padding: var(--w95-gap-lg); }
+
+/* Sunken and white: this is text to read, and the theme says read-out-of goes in a well. */
+.summary-content {
+    background: var(--w95-field);
+    padding: var(--w95-gap-lg);
+    max-height: 34rem;
+    overflow-y: auto;
+    box-shadow:
+        inset -1px -1px var(--w95-light),
+        inset 1px 1px var(--w95-shadow),
+        inset -2px -2px var(--w95-face-light),
+        inset 2px 2px var(--w95-dark);
+}
+
+.summary-content h3,
+.summary-content h4,
+.summary-content h5,
+.summary-content h6 {
+    font-size: var(--w95-h4);
+    margin: var(--w95-gap-lg) 0 var(--w95-gap-sm);
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--w95-face-light);
+}
+
+.summary-content > :first-child { margin-top: 0; }
+
+.summary-content p { margin: 0 0 var(--w95-gap); line-height: 1.6; }
+
+.summary-content ul,
+.summary-content ol { margin: 0 0 var(--w95-gap); padding-left: 24px; }
+
+.summary-content li { margin-bottom: var(--w95-gap-sm); line-height: 1.6; }
+
+.summary-content li:last-child { margin-bottom: 0; }
+
+/* The whole reason the prompts insist on [hh:mm:ss]: every claim in the summary is a
+   seek into the audio that backs it up. */
+.summary-cue {
+    font-family: var(--w95-mono);
+    font-size: var(--w95-mono-size);
+    color: #000080;
+    cursor: pointer;
+    text-decoration: underline;
+    white-space: nowrap;
+}
+
+.summary-cue:hover,
+.summary-cue:focus-visible { background: #1084d0; color: #fff; text-decoration: none; }
+
+.summary-footer {
+    font-size: var(--w95-text-size-sm);
+    margin-top: var(--w95-gap-sm);
+}
 
 /* ================================================================ player == */
 
 .episode-player {
     position: static;
     background: var(--w95-surface);
-    padding: 6px;
+    padding: var(--w95-gap);
     border: none;
     box-shadow:
         inset -1px -1px var(--w95-dark),
         inset 1px 1px var(--w95-light),
         inset -2px -2px var(--w95-shadow),
         inset 2px 2px var(--w95-face-light);
-    margin-bottom: 8px;
+    margin-bottom: var(--w95-gap);
 }
 
-.episode-player audio { width: 100%; height: 32px; }
+.episode-player audio { width: 100%; height: 38px; }
 
 /* ================================================================= login == */
 
@@ -573,7 +723,7 @@ textarea:focus {
 /* The login form is a dialog box, title bar and all. */
 .login-card {
     width: 100%;
-    max-width: 22rem;
+    max-width: 26rem;
     background: var(--w95-surface);
     border: none;
     border-radius: 0;
@@ -589,15 +739,15 @@ textarea:focus {
     background: linear-gradient(90deg, var(--w95-title-active-from), var(--w95-title-active-to));
     color: #fff;
     font-weight: bold;
-    font-size: 12px;
-    padding: 3px 4px;
-    margin-bottom: 10px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-titlebar-pad-y) var(--w95-titlebar-pad-x);
+    margin-bottom: var(--w95-gap-lg);
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--w95-gap-sm);
 }
 
-.login-body { padding: 0 10px 10px; }
+.login-body { padding: 0 var(--w95-gap-lg) var(--w95-gap-lg); }
 
 /* ============================================================ scrollbars == */
 
@@ -606,7 +756,7 @@ textarea:focus {
     scrollbar-color: var(--w95-surface) #dfdfdf;
 }
 
-::-webkit-scrollbar { width: 17px; height: 17px; }
+::-webkit-scrollbar { width: var(--w95-scrollbar); height: var(--w95-scrollbar); }
 
 ::-webkit-scrollbar-track {
     background-color: #dfdfdf;
@@ -628,7 +778,7 @@ textarea:focus {
 ::-webkit-scrollbar-button:single-button {
     background: var(--w95-surface);
     display: block;
-    height: 17px;
+    height: var(--w95-scrollbar);
     box-shadow:
         inset -1px -1px var(--w95-dark),
         inset 1px 1px var(--w95-light),
@@ -639,16 +789,20 @@ textarea:focus {
 /* ============================================================ blazor UI === */
 
 #blazor-error-ui {
+    /* The template's own rule carries this and the Win95 rewrite dropped it, which left the
+       bar showing on every page from first paint. Blazor sets display:block itself when there
+       is actually an error. */
+    display: none;
     background: var(--w95-surface);
     color: var(--w95-text);
-    font-size: 12px;
-    bottom: 30px;
+    font-size: var(--w95-text-size);
+    bottom: 38px;
     box-shadow:
         inset -1px -1px var(--w95-dark),
         inset 1px 1px var(--w95-light),
         inset -2px -2px var(--w95-shadow),
         inset 2px 2px var(--w95-face-light);
-    padding: 8px 12px;
+    padding: var(--w95-gap) var(--w95-gap-lg);
 }
 
 .components-reconnect-container,
@@ -662,7 +816,7 @@ dialog#components-reconnect-modal {
 /* ======================================================= confirm dialog === */
 
 .confirm-dialog {
-    max-width: 30rem;
+    max-width: 34rem;
     margin: 2rem auto;
     background: var(--w95-surface);
     padding: 3px;
@@ -677,44 +831,44 @@ dialog#components-reconnect-modal {
     background: linear-gradient(90deg, var(--w95-title-active-from), var(--w95-title-active-to));
     color: #fff;
     font-weight: bold;
-    font-size: 12px;
-    padding: 3px 4px;
+    font-size: var(--w95-text-size);
+    padding: var(--w95-titlebar-pad-y) var(--w95-titlebar-pad-x);
     display: flex;
-    gap: 6px;
+    gap: var(--w95-gap-sm);
     align-items: center;
 }
 
-.confirm-body { padding: 14px 12px 12px; }
+.confirm-body { padding: var(--w95-gap-lg) var(--w95-gap-lg) var(--w95-gap); }
 
 .confirm-question {
-    font-size: 12px;
+    font-size: var(--w95-text-size);
     font-weight: bold;
-    margin-bottom: 8px;
+    margin-bottom: var(--w95-gap);
 }
 
 .confirm-list {
-    font-size: 12px;
-    margin: 0 0 14px;
-    padding-left: 20px;
+    font-size: var(--w95-text-size);
+    margin: 0 0 var(--w95-gap-lg);
+    padding-left: 24px;
 }
 
-.confirm-list li { margin-bottom: 2px; }
+.confirm-list li { margin-bottom: var(--w95-gap-xs); }
 
 .confirm-actions {
     display: flex;
-    gap: 6px;
+    gap: var(--w95-gap);
     justify-content: center;
     border-top: 1px solid var(--w95-shadow);
-    padding-top: 10px;
+    padding-top: var(--w95-gap-lg);
 }
 
-.confirm-actions .btn { min-width: 85px; }
+.confirm-actions .btn { min-width: 100px; }
 
 /* ================================================== upload progress ======= */
 
 .upload-progress {
-    margin-top: 12px;
-    padding: 8px;
+    margin-top: var(--w95-gap-lg);
+    padding: var(--w95-gap-lg);
     background: var(--w95-surface);
     box-shadow:
         inset -1px -1px var(--w95-dark),
@@ -724,23 +878,23 @@ dialog#components-reconnect-modal {
 }
 
 .upload-progress-label {
-    font-size: 12px;
-    margin-bottom: 5px;
+    font-size: var(--w95-text-size);
+    margin-bottom: var(--w95-gap-sm);
 }
 
-.upload-progress-detail { margin-top: 4px; }
+.upload-progress-detail { margin-top: var(--w95-gap-sm); }
 
 /* The classic busy signal: an hourglass that turns over, and a waiting cursor. */
 .upload-progress-label {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--w95-gap-sm);
 }
 
 .upload-hourglass {
     display: inline-block;
-    width: 14px;
-    font-size: 13px;
+    width: 16px;
+    font-size: var(--w95-h4);
     line-height: 1;
     animation: w95-hourglass 1s steps(1, end) infinite;
 }

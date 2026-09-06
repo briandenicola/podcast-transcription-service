@@ -32,6 +32,12 @@ public class Transcript
     /// </summary>
     public string? QualityWarning { get; set; }
 
+    /// <summary>
+    /// What a local model made of this transcript, when summarisation is configured and has run.
+    /// Null is the normal state for an older transcript, or one on a host with no Ollama.
+    /// </summary>
+    public Summary? Summary { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
 

@@ -13,6 +13,17 @@ public static class TimeFormat
             : $"{span.Minutes}:{span.Seconds:00}";
     }
 
+    /// <summary>
+    /// Always hh:mm:ss, unlike <see cref="Clock"/>, which drops the hour on short audio. Used
+    /// wherever a timestamp is going to be read back rather than only looked at — the summary
+    /// prompts ask the model to cite this shape, and the summary renderer parses it out again.
+    /// </summary>
+    public static string Timestamp(int milliseconds)
+    {
+        var span = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return $"{(int)span.TotalHours:00}:{span.Minutes:00}:{span.Seconds:00}";
+    }
+
     public static string Duration(double? seconds) =>
         seconds is > 0 ? Clock((int)(seconds.Value * 1000)) : "—";
 

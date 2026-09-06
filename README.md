@@ -7,6 +7,10 @@ The app does the ingest, chunking, storage and UI. Inference happens in `whisper
 which runs wherever the GPU is — for this deployment, the Windows box. The app reaches it
 over HTTP at `Whisper:BaseUrl`.
 
+Finished transcripts can optionally be read by a local [Ollama](https://ollama.com) model, which
+writes a summary of what the episode argues and who argues it, with clickable timestamps back
+into the audio. See [Episode summaries](#episode-summaries).
+
 See [PLAN.md](PLAN.md) for the architecture and full backlog.
 
 ## Status
@@ -135,6 +139,14 @@ layered over Bootstrap rather than replacing it, so Bootstrap still handles the 
 and every page's markup is unchanged. The whole look comes from four greys: a raised edge is
 light on the top-left and dark on the bottom-right, and a sunken one is that inverted.
 
+Win95 drew everything at 8pt, which on a modern display is a squint. The theme keeps the look
+and the 2px bevels but runs the type and spacing a notch up — a 14px base, with headings,
+control padding and table rows in proportion. Every size comes from custom properties declared
+at the top of `wwwroot/app.css` (`--w95-text-size`, `--w95-gap`, `--w95-btn-pad-y` and the
+rest), including in the scoped stylesheets for the layout and nav, which read them through the
+cascade. Rescaling the whole app is a matter of editing those values rather than hunting pixel
+figures through five files.
+
 The status bar's right-hand panel reports whether the browser could reach the Blazor circuit.
 Interactive controls need one, and when it fails to connect the page still renders while buttons
 do nothing — indistinguishable from a bug unless something says so.
@@ -202,6 +214,63 @@ second, and a network round trip per tick would lag the audio for no benefit.
 from `/episodes/{id}/transcripts/{transcriptId}/export/{format}`. The JSON export carries the word
 timings and per-word probabilities.
 
+### Episode summaries
+
+Once a transcript is finished it can be read by a local model and turned into a summary of what
+the episode actually argues: the positions each speaker takes, where they disagree, the claims
+worth remembering, and what a listener leaves with. Every point carries an `[hh:mm:ss]` that is
+clickable — pressing one seeks the player to the moment it came from, so the summary doubles as
+an index into the audio.
+
+This is off until configured. Set `OLLAMA_ENABLED=true` and point `OLLAMA_BASE_URL` at an
+[Ollama](https://ollama.com) server, having pulled the model there first:
+
+```
+OLLAMA_HOST=0.0.0.0 ollama serve    # it binds to 127.0.0.1 otherwise
+ollama pull llama3.1:8b
+```
+
+The Settings page tests the connection the same way it tests `whisper-server`, and distinguishes
+the two failures that look identical from the outside: a server that is not answering, and a
+server that is up but was never given the model — the second reports the exact `ollama pull` to
+run, and lists what the server does have.
+
+An 8B model is enough for summarising and fits a 8–12 GB card. Ollama does not have to be on the
+same machine as `whisper-server`, though it usually is, being the one with the VRAM.
+
+#### Why it takes several passes
+
+A 90-minute episode is well over 100,000 characters. Ollama defaults `num_ctx` to 2048 tokens and
+it is rarely raised past 8192, and the failure mode when a prompt exceeds it is not an error —
+the input is silently truncated, and the answer comes back looking like a model that ignored
+everything after the first twenty minutes.
+
+So a long transcript is cut into windows at segment boundaries, each window is read for notes,
+and a final pass writes the summary from the notes. When the notes are themselves too long for
+one prompt — a three-hour episode on a small context — they are folded in batches first, and
+that repeats until they fit. A short episode skips all of it and goes through in a single call.
+`Ollama:MaxWindowChars` is the knob: it has to sit well inside `Ollama:ContextTokens` with room
+for the prompt and the answer, so the two move together.
+
+The summary card records which route was taken — "one pass" or "N passes" — because that is
+where any lost detail went.
+
+#### When it runs
+
+By default, as the last step of every transcription job, with the job showing `Summarizing`
+while it happens. Set `OLLAMA_AUTO_SUMMARIZE=false` to leave it to the **Summarize** button on
+the episode page instead. Either way the button is there, and **Re-summarize** replaces the
+existing summary — unlike a transcript, it costs minutes rather than hours to make again.
+
+Summarisation never fails a job. The transcript is written and marked complete *before* the
+model is asked for anything, so an Ollama that is down or a model that was never pulled costs
+the summary and nothing else: the job still completes, the failure is logged, and the button
+runs it again later. Losing an hour of GPU time because a language model was unreachable would
+be an absurd trade.
+
+One summary is kept per transcript, so re-transcribing on a better model gets its own and the
+old one stays attached to the old text.
+
 ## Configuration
 
 Every setting can come from `appsettings.json` or from the environment, where `:` becomes `__`
@@ -222,6 +291,16 @@ and `.env`.
 | `Whisper:SuppressNonSpeechTokens` | `true` | Music and applause are where hallucinations usually start. |
 | `Whisper:BeamSize` / `BestOf` | `5` | Beam search is slower and markedly less prone to looping. |
 | `Whisper:RequestTimeoutMinutes` | `120` | The `HttpClient` default of 100 seconds fails on any real episode. |
+| `Ollama:Enabled` | `false` | Off until asked for. Summaries are optional, and a host with no Ollama should not fail a call after every job. |
+| `Ollama:BaseUrl` | `http://localhost:11434` | Where Ollama is listening. Ollama binds to `127.0.0.1` unless started with `OLLAMA_HOST=0.0.0.0`. |
+| `Ollama:Model` | `llama3.1:8b` | Must already be pulled on that server. Recorded against each summary. |
+| `Ollama:AutoSummarize` | `true` | Summarise at the end of every job. False leaves it to the button on the episode page. |
+| `Ollama:ContextTokens` | `8192` | `num_ctx`. Ollama's own default is 2048, which silently truncates anything episode-sized. |
+| `Ollama:MaxWindowChars` | `12000` | How much transcript goes into one pass. Must fit inside `ContextTokens` with the prompt and answer allowed for. |
+| `Ollama:MaxOutputTokens` | `1200` | `num_predict`: ceiling on one answer. |
+| `Ollama:Temperature` | `0.2` | Low on purpose. This is summarising, not writing. |
+| `Ollama:RequestTimeoutMinutes` | `30` | A long episode is several generate calls back to back, and a CPU-only model is slow. |
+| `Ollama:ExtraInstructions` | _(none)_ | Appended to the summary instructions. Where a show-specific steer goes. |
 | `Storage:DataPath` | `var/data` | Holds `app.db` and rolling logs. `/data` in the container. |
 | `Storage:MediaPath` | `var/media` | Source audio and prepared 16 kHz WAVs. `/media` in the container. |
 | `Storage:MaxUploadMb` | `2048` | Upload ceiling. |

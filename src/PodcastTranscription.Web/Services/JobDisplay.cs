@@ -9,6 +9,7 @@ public static class JobDisplay
         JobState.Queued => "bg-secondary",
         JobState.Downloading or JobState.Preparing => "bg-info text-dark",
         JobState.Transcribing => "bg-primary",
+        JobState.Summarizing => "bg-info text-dark",
         JobState.Completed => "bg-success",
         JobState.Failed => "bg-danger",
         JobState.Cancelled => "bg-warning text-dark",
@@ -16,10 +17,12 @@ public static class JobDisplay
     };
 
     public static bool IsActive(JobState state) =>
-        state is JobState.Queued or JobState.Downloading or JobState.Preparing or JobState.Transcribing;
+        state is JobState.Queued or JobState.Downloading or JobState.Preparing
+              or JobState.Transcribing or JobState.Summarizing;
 
     public static bool IsRunning(JobState state) =>
-        state is JobState.Downloading or JobState.Preparing or JobState.Transcribing;
+        state is JobState.Downloading or JobState.Preparing
+              or JobState.Transcribing or JobState.Summarizing;
 
     public static string Elapsed(Job job)
     {
