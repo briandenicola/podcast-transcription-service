@@ -1,0 +1,196 @@
+@page "/users"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.WebUtilities
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Security
+@attribute [Authorize(Policy = Roles.AdminPolicy)]
+@inject UserStore Accounts
+@inject AdminAuthenticator Admin
+@inject NavigationManager Navigation
+
+<PageTitle>Users</PageTitle>
+
+<h1 class="h3 mb-1">Users</h1>
+<p class="text-muted small mb-4">
+    Accounts stored in the database, alongside the configured admin. <strong>Viewers</strong> read
+    the library and change nothing. <strong>Members</strong> add episodes, transcribe, correct text
+    and manage feeds. <strong>Admins</strong> also delete things and come here.
+</p>
+
+@if (Message is { } message)
+{
+    <div class="alert @(Failed ? "alert-danger" : "alert-success")">@message</div>
+}
+
+<div class="card mb-4">
+    <div class="card-header py-2 fw-semibold">The configured admin</div>
+    <div class="card-body">
+        <dl class="row mb-0 small">
+            <dt class="col-4">Username</dt><dd class="col-8"><code>@Admin.Username</code></dd>
+            <dt class="col-4">Set by</dt>
+            <dd class="col-8"><code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD_HASH</code> in <code>.env</code></dd>
+        </dl>
+        <p class="small text-muted mt-2 mb-0">
+            Always an admin, and it cannot be edited or removed from here. It is the way back in
+            when the database is restored from a backup that predates every account below — which
+            is exactly when you would otherwise be locked out of your own library.
+        </p>
+    </div>
+</div>
+
+<div class="table-wrap mb-4">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>State</th>
+                <th>Added</th>
+                <th>Last seen</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_users.Count == 0)
+            {
+                <tr><td colspan="7" class="text-muted">No accounts yet. The configured admin is the only way in.</td></tr>
+            }
+            @foreach (var user in _users)
+            {
+                <tr>
+                    <td class="font-monospace">
+                        @user.Username
+                        @if (IsSelf(user))
+                        {
+                            <span class="badge bg-secondary ms-1">you</span>
+                        }
+                    </td>
+                    <td>@(user.DisplayName ?? "—")</td>
+                    <td>
+                        <form method="post" action="/users/@user.Id/update" class="d-flex gap-1 align-items-center">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="displayName" value="@user.DisplayName" />
+                            <select name="role" class="form-select form-select-sm" style="width: 8rem;"
+                                    disabled="@IsSelf(user)" aria-label="Role for @user.Username">
+                                @foreach (var role in AllRoles)
+                                {
+                                    <option value="@role" selected="@(role == user.Role)">@role</option>
+                                }
+                            </select>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" name="isActive"
+                                       checked="@user.IsActive" disabled="@IsSelf(user)"
+                                       id="active-@user.Id" />
+                                <label class="form-check-label small" for="active-@user.Id">Active</label>
+                            </div>
+                            <button type="submit" class="btn btn-sm" disabled="@IsSelf(user)">Save</button>
+                        </form>
+                    </td>
+                    <td>
+                        @if (user.IsActive)
+                        {
+                            <span class="badge bg-success">active</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning text-dark">deactivated</span>
+                        }
+                    </td>
+                    <td class="small">@user.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    <td class="small">@(user.LastSignInAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "never")</td>
+                    <td class="text-end text-nowrap">
+                        <form method="post" action="/users/@user.Id/password" class="d-inline-flex gap-1">
+                            <AntiforgeryToken />
+                            <input type="password" name="password" class="form-control form-control-sm"
+                                   style="width: 11rem;" placeholder="New password"
+                                   aria-label="New password for @user.Username" />
+                            <button type="submit" class="btn btn-sm">Set</button>
+                        </form>
+                        <form method="post" action="/users/@user.Id/delete" class="d-inline">
+                            <AntiforgeryToken />
+                            <button type="submit" class="btn btn-sm" disabled="@IsSelf(user)"
+                                    title="Delete this account. What they queued or corrected keeps their name.">
+                                Delete
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header py-2 fw-semibold">Add an account</div>
+    <div class="card-body">
+        <form method="post" action="/users/create" class="row g-2 align-items-end">
+            <AntiforgeryToken />
+            <div class="col-md-3">
+                <label class="form-label small mb-1" for="new-username">Username</label>
+                <input id="new-username" name="username" class="form-control form-control-sm" required />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1" for="new-display">Display name</label>
+                <input id="new-display" name="displayName" class="form-control form-control-sm"
+                       placeholder="optional" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1" for="new-role">Role</label>
+                <select id="new-role" name="role" class="form-select form-select-sm">
+                    @foreach (var role in AllRoles)
+                    {
+                        <option value="@role" selected="@(role == UserRole.Viewer)">@role</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1" for="new-password">Password</label>
+                <input id="new-password" name="password" type="password"
+                       class="form-control form-control-sm" required
+                       minlength="@UserStore.MinimumPasswordLength" />
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-sm w-100">Add</button>
+            </div>
+        </form>
+        <div class="form-text mt-2">
+            At least @UserStore.MinimumPasswordLength characters. Stored as a PBKDF2 hash, the same
+            as the configured admin's — the plaintext is never written down.
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly UserRole[] AllRoles = [UserRole.Viewer, UserRole.Member, UserRole.Admin];
+
+    private List<AppUser> _users = [];
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? _signedInName;
+
+    private string? Message => Query("notice") ?? Query("error");
+
+    private bool Failed => Query("error") is not null;
+
+    private string? Query(string key) =>
+        QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query).TryGetValue(key, out var value)
+            ? value.ToString()
+            : null;
+
+    private bool IsSelf(AppUser user) =>
+        string.Equals(_signedInName, user.Username, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is not null)
+        {
+            _signedInName = (await AuthState).User.Identity?.Name;
+        }
+
+        _users = await Accounts.ListAsync();
+    }
+}

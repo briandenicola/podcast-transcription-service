@@ -1,3 +1,6 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using PodcastTranscription.Web.Services.Security
+
 <div class="nav-header">Podcast Transcription</div>
 
 <nav class="nav">
@@ -25,9 +28,21 @@
         </NavLink>
     </div>
 
-    <div class="nav-item">
-        <NavLink class="nav-link" href="upload">
-            <span class="nav-icon" aria-hidden="true">➕</span> Add episode
-        </NavLink>
-    </div>
+    @* Adding an episode is members and up; the endpoint refuses viewers either way, so this
+       only saves them a button that would fail. *@
+    <AuthorizeView Policy="@Roles.MemberPolicy">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="upload">
+                <span class="nav-icon" aria-hidden="true">➕</span> Add episode
+            </NavLink>
+        </div>
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Roles.AdminPolicy">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="users">
+                <span class="nav-icon" aria-hidden="true">👥</span> Users
+            </NavLink>
+        </div>
+    </AuthorizeView>
 </nav>

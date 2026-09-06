@@ -1,4 +1,6 @@
 @page "/settings"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = PodcastTranscription.Web.Services.Security.Roles.AdminPolicy)]
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.Options
 @using PodcastTranscription.Web.Configuration

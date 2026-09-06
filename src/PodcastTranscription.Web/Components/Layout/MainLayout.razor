@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using PodcastTranscription.Web.Services.Security
 
 <div class="desktop">
     <div class="window">
@@ -21,7 +22,10 @@
                 <div class="top-row">
                     <AuthorizeView>
                         <Authorized>
-                            <span>@context.User.Identity?.Name</span>
+                            <span>
+                                @context.User.Identity?.Name
+                                <span class="text-muted">· @RoleOf(context.User)</span>
+                            </span>
                             @* A form rather than a link: signing out changes state, so a GET
                                should not be able to trigger it. *@
                             <form method="post" action="/logout" class="m-0">
@@ -30,7 +34,10 @@
                             </form>
                         </Authorized>
                     </AuthorizeView>
-                    <a href="/settings" class="btn btn-sm">Settings</a>
+                    @* Settings is admin-only, and every action on it is too. *@
+                    <AuthorizeView Policy="@Roles.AdminPolicy">
+                        <a href="/settings" class="btn btn-sm">Settings</a>
+                    </AuthorizeView>
                 </div>
 
                 <article class="content">
@@ -58,6 +65,17 @@
         </span>
     </div>
 </div>
+
+@code {
+    /// <summary>
+    /// The role shown beside the name. The configured admin has no database row, so this reads
+    /// the claim rather than looking anything up.
+    /// </summary>
+    private static string RoleOf(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole(Roles.Admin) ? "admin"
+        : user.IsInRole(Roles.Member) ? "member"
+        : "viewer";
+}
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

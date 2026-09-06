@@ -21,6 +21,11 @@ public class Segment
 
     public bool IsEdited { get; set; }
 
+    /// <summary>Who corrected this line, and when. A username for the same reason <see cref="Job.QueuedBy"/> is.</summary>
+    public string? EditedBy { get; set; }
+
+    public DateTimeOffset? EditedAt { get; set; }
+
     /// <summary>Unused until diarization (§7.3). Present so the schema does not have to change then.</summary>
     public int? SpeakerId { get; set; }
 }

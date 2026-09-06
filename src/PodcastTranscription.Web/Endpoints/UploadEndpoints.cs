@@ -1,4 +1,6 @@
 using PodcastTranscription.Web.Services;
+using PodcastTranscription.Web.Services.Security;
+using System.Security.Claims;
 using PodcastTranscription.Web.Services.Ingest;
 
 namespace PodcastTranscription.Web.Endpoints;
@@ -10,6 +12,8 @@ namespace PodcastTranscription.Web.Endpoints;
 /// chunked through a websocket, and nothing works at all if the circuit has not connected — the
 /// page looks fine but the button does nothing. A plain multipart POST is faster for large files
 /// and works with no JavaScript running at all.
+///
+/// Members and above: adding an episode is the work, not the configuration.
 /// </summary>
 public static class UploadEndpoints
 {
@@ -17,6 +21,7 @@ public static class UploadEndpoints
     {
         app.MapPost("/upload/file", async (
             HttpRequest request,
+            ClaimsPrincipal user,
             EpisodeImporter importer,
             JobQueue queue,
             MediaStore media,
@@ -52,7 +57,7 @@ public static class UploadEndpoints
 
                 if (!result.WasDuplicate)
                 {
-                    await queue.EnqueueAsync(result.Episode.Id, ct: ct);
+                    await queue.EnqueueAsync(result.Episode.Id, queuedBy: user.Identity?.Name, ct: ct);
                 }
 
                 log.LogInformation("Uploaded {FileName} as episode {EpisodeId}", file.FileName, result.Episode.Id);
@@ -65,11 +70,12 @@ public static class UploadEndpoints
                 log.LogError(ex, "Upload of {FileName} failed", file.FileName);
                 return Results.Redirect("/upload?error=" + Uri.EscapeDataString(ex.Message));
             }
-        });
+        }).RequireAuthorization(Roles.MemberPolicy);
         // The body-size ceiling is raised globally in Program.cs, from Storage:MaxUploadMb.
 
         app.MapPost("/upload/url", async (
             HttpRequest request,
+            ClaimsPrincipal user,
             EpisodeImporter importer,
             JobQueue queue,
             CancellationToken ct) =>
@@ -80,7 +86,7 @@ public static class UploadEndpoints
             try
             {
                 var episode = await importer.ImportFromUrlAsync(url, form["title"], form["show"], ct);
-                await queue.EnqueueAsync(episode.Id, ct: ct);
+                await queue.EnqueueAsync(episode.Id, queuedBy: user.Identity?.Name, ct: ct);
 
                 return Results.Redirect($"/episodes/{episode.Id}");
             }
@@ -88,6 +94,6 @@ public static class UploadEndpoints
             {
                 return Results.Redirect("/upload?tab=url&error=" + Uri.EscapeDataString(ex.Message));
             }
-        });
+        }).RequireAuthorization(Roles.MemberPolicy);
     }
 }

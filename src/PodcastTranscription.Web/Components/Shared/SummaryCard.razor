@@ -1,6 +1,7 @@
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Summarization
+@using PodcastTranscription.Web.Services.Security
 
 @* Everything here is a link or a form post. Summarising used to be an @onclick, which needs a
    live Blazor circuit — and without one the button did nothing at all. *@
@@ -17,13 +18,15 @@
         <span class="summary-actions">
             @if (Run is null or { Finished: true })
             {
-                <form method="post" action="/episodes/@EpisodeId/summarize">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="transcriptId" value="@TranscriptId" />
-                    <button type="submit" class="btn btn-sm" disabled="@(!Enabled)" title="@ButtonTitle">
-                        @(Summary is null ? "Summarize" : "Re-summarize")
-                    </button>
-                </form>
+                <AuthorizeView Policy="@Roles.MemberPolicy">
+                    <form method="post" action="/episodes/@EpisodeId/summarize">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="transcriptId" value="@TranscriptId" />
+                        <button type="submit" class="btn btn-sm" disabled="@(!Enabled)" title="@ButtonTitle">
+                            @(Summary is null ? "Summarize" : "Re-summarize")
+                        </button>
+                    </form>
+                </AuthorizeView>
             }
         </span>
     </div>

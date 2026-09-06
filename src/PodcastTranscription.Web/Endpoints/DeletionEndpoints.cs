@@ -1,4 +1,5 @@
 using PodcastTranscription.Web.Services;
+using PodcastTranscription.Web.Services.Security;
 
 namespace PodcastTranscription.Web.Endpoints;
 
@@ -8,6 +9,9 @@ namespace PodcastTranscription.Web.Endpoints;
 /// Deleting used to be an @onclick handler, which needs a live Blazor circuit — so wherever the
 /// circuit does not connect, the button silently did nothing. Destructive actions are the worst
 /// possible place for that, and they are one-shot actions that never needed a circuit anyway.
+///
+/// All of them are admin-only. Deletion is the one thing that cannot be undone from inside the
+/// app, so it is not something a member should reach by guessing a URL.
 /// </summary>
 public static class DeletionEndpoints
 {
@@ -20,7 +24,7 @@ public static class DeletionEndpoints
             return result.Deleted
                 ? Results.Redirect("/")
                 : Results.Redirect($"/episodes/{id}?error=" + Uri.EscapeDataString(result.Refusal!));
-        });
+        }).RequireAuthorization(Roles.AdminPolicy);
 
         app.MapPost("/delete/transcript/{id:int}", async (
             int id, int episodeId, DeletionService deletion, CancellationToken ct) =>
@@ -30,7 +34,7 @@ public static class DeletionEndpoints
             return Results.Redirect(result.Deleted
                 ? $"/episodes/{episodeId}"
                 : $"/episodes/{episodeId}?error=" + Uri.EscapeDataString(result.Refusal!));
-        });
+        }).RequireAuthorization(Roles.AdminPolicy);
 
         app.MapPost("/delete/job/{id:int}", async (int id, DeletionService deletion, CancellationToken ct) =>
         {
@@ -39,6 +43,6 @@ public static class DeletionEndpoints
             return Results.Redirect(result.Deleted
                 ? "/jobs"
                 : "/jobs?error=" + Uri.EscapeDataString(result.Refusal!));
-        });
+        }).RequireAuthorization(Roles.AdminPolicy);
     }
 }
