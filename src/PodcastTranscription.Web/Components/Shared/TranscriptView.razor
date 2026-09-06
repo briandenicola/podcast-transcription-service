@@ -1,0 +1,80 @@
+@using System.Text.Json
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Services
+
+@* Timings live in data attributes; player.js does the highlighting locally rather than over the circuit. *@
+<div id="transcript-body" class="transcript @(ShadeConfidence ? "shade-confidence" : "")" data-follow="@(Follow ? "true" : "false")">
+    @foreach (var segment in Segments)
+    {
+        <div class="transcript-line" data-segment data-t0="@segment.StartMs" data-t1="@segment.EndMs">
+            <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
+            <span class="transcript-text">
+                @if (ShowWords && WordsFor(segment) is { Count: > 0 } words)
+                {
+                    @foreach (var word in words)
+                    {
+                        <span class="w @ConfidenceClass(word)" data-word data-t0="@word.StartMs" data-t1="@word.EndMs"
+                              title="@ConfidenceTitle(word)">@word.Text</span>
+                        @(" ")
+                    }
+                }
+                else
+                {
+                    @segment.Text
+                }
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Segment> Segments { get; set; } = [];
+
+    /// <summary>Render each word separately. Off by default: an hour of audio is ~13,000 spans.</summary>
+    [Parameter] public bool ShowWords { get; set; }
+
+    [Parameter] public bool ShadeConfidence { get; set; }
+
+    [Parameter] public bool Follow { get; set; } = true;
+
+    private readonly Dictionary<int, List<TranscribedWord>> _wordCache = [];
+
+    private List<TranscribedWord>? WordsFor(Segment segment)
+    {
+        if (_wordCache.TryGetValue(segment.Id, out var cached))
+        {
+            return cached;
+        }
+
+        if (string.IsNullOrWhiteSpace(segment.WordsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var words = JsonSerializer.Deserialize<List<TranscribedWord>>(segment.WordsJson) ?? [];
+            _wordCache[segment.Id] = words;
+            return words;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Shading bands for per-word probability. The point is to find the mangled proper nouns
+    /// quickly, so only genuinely doubtful words are marked.
+    /// </summary>
+    private static string ConfidenceClass(TranscribedWord word) => word.Probability switch
+    {
+        null => string.Empty,
+        < 0.45 => "conf-low",
+        < 0.70 => "conf-mid",
+        _ => string.Empty
+    };
+
+    private static string? ConfidenceTitle(TranscribedWord word) =>
+        word.Probability is { } p ? $"{p:P0} confidence" : null;
+}

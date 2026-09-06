@@ -1,13 +1,16 @@
 @page "/episodes/{EpisodeId:int}"
+@using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.EntityFrameworkCore
+@using PodcastTranscription.Web.Components.Shared
 @using PodcastTranscription.Web.Data
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobQueue Queue
 @inject JobNotifier Notifier
-@inject WhisperClient Whisper
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>@(_episode?.Title ?? "Episode")</PageTitle>
 
@@ -39,6 +42,13 @@ else
             }
         </div>
     </div>
+
+    @if (_hasAudio)
+    {
+        <div class="episode-player mb-3">
+            <audio id="episode-audio" controls preload="metadata" src="/media/episodes/@EpisodeId/audio"></audio>
+        </div>
+    }
 
     @if (_activeJob is { } job)
     {
@@ -93,7 +103,7 @@ else
                 @foreach (var t in _transcripts)
                 {
                     <li class="nav-item">
-                        <button class="nav-link @(t.Id == _selectedId ? "active" : "")" @onclick="() => _selectedId = t.Id">
+                        <button class="nav-link @(t.Id == _selectedId ? "active" : "")" @onclick="() => Select(t.Id)">
                             @t.Model
                             <span class="small opacity-75">@t.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm")</span>
                         </button>
@@ -104,29 +114,61 @@ else
 
         @if (Selected is { } selected)
         {
-            <div class="text-muted small mb-2">
-                @selected.Segments.Count segments
-                · model @selected.Model
-                · language @(selected.Language ?? "unknown")
-                @if (selected.RealtimeFactor is { } factor)
-                {
-                    <span> · @factor.ToString("N1")× realtime</span>
-                }
-                @if (!selected.IsComplete)
-                {
-                    <span class="badge bg-info text-dark ms-2">partial</span>
-                }
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="text-muted small">
+                    @selected.Segments.Count segments
+                    · model @selected.Model
+                    · language @(selected.Language ?? "unknown")
+                    @if (selected.RealtimeFactor is { } factor)
+                    {
+                        <span> · @factor.ToString("N1")× realtime</span>
+                    }
+                    @if (!selected.IsComplete)
+                    {
+                        <span class="badge bg-info text-dark ms-2">partial</span>
+                    }
+                </div>
+
+                <div class="d-flex align-items-center gap-3">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="show-words"
+                               checked="@_showWords" @onchange="ToggleWords" />
+                        <label class="form-check-label small" for="show-words">Words</label>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="shade-confidence"
+                               checked="@_shadeConfidence" @onchange="ToggleShading" />
+                        <label class="form-check-label small" for="shade-confidence">Confidence</label>
+                    </div>
+
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"
+                                aria-expanded="false">Export</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            @foreach (var (format, label) in ExportFormats)
+                            {
+                                <li>
+                                    <a class="dropdown-item"
+                                       href="/episodes/@EpisodeId/transcripts/@selected.Id/export/@format">@label</a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
             </div>
 
-            <div class="transcript">
-                @foreach (var segment in selected.Segments)
-                {
-                    <div class="transcript-line">
-                        <span class="transcript-time font-monospace text-muted">@TimeFormat.Clock(segment.StartMs)</span>
-                        <span class="transcript-text">@segment.Text</span>
-                    </div>
-                }
-            </div>
+            @if (_showWords && selected.Segments.All(s => string.IsNullOrEmpty(s.WordsJson)))
+            {
+                <div class="alert alert-secondary py-2 small">
+                    This transcript has no word timings — it was produced with
+                    <code>Transcription:WordTimestamps</code> off. Re-transcribe to get them.
+                </div>
+            }
+
+            <TranscriptView Segments="selected.Segments"
+                            ShowWords="_showWords"
+                            ShadeConfidence="_shadeConfidence"
+                            Follow="_follow" />
         }
     }
 }
@@ -134,12 +176,29 @@ else
 @code {
     [Parameter] public int EpisodeId { get; set; }
 
+    private static readonly (string Format, string Label)[] ExportFormats =
+    [
+        ("srt", "SubRip (.srt)"),
+        ("vtt", "WebVTT (.vtt)"),
+        ("txt", "Plain text (.txt)"),
+        ("json", "JSON (.json)"),
+        ("md", "Markdown (.md)")
+    ];
+
     private Episode? _episode;
     private List<Transcript> _transcripts = [];
     private int? _selectedId;
     private Job? _activeJob;
     private Job? _lastFailure;
     private Timer? _ticker;
+    private bool _hasAudio;
+    private bool _showWords;
+    private bool _shadeConfidence;
+    private readonly bool _follow = true;
+
+    // A ?t=ms deep link from search: seek there once the player is on the page.
+    private int? _pendingSeekMs;
+    private bool _playerReady;
 
     private Transcript? Selected => _transcripts.FirstOrDefault(t => t.Id == _selectedId) ?? _transcripts.FirstOrDefault();
 
@@ -150,7 +209,20 @@ else
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        ReadSeekFromQuery();
+        await LoadAsync();
+    }
+
+    private void ReadSeekFromQuery()
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
+        if (query.TryGetValue("t", out var value) && int.TryParse(value, out var ms))
+        {
+            _pendingSeekMs = ms;
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -161,6 +233,8 @@ else
         {
             return;
         }
+
+        _hasAudio = !string.IsNullOrWhiteSpace(_episode.AudioPath) || !string.IsNullOrWhiteSpace(_episode.PreparedAudioPath);
 
         _transcripts = await db.Transcripts
             .Where(t => t.EpisodeId == EpisodeId)
@@ -182,7 +256,39 @@ else
             : null;
     }
 
-    // The worker raises this from its own thread for every job; only this episode's matter.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_hasAudio || Selected is null)
+        {
+            return;
+        }
+
+        // Re-bind after every render: toggling words replaces the elements the player tracks.
+        await JS.InvokeVoidAsync("podcastPlayer.init", "episode-audio", "transcript-body");
+        _playerReady = true;
+
+        if (_pendingSeekMs is { } ms)
+        {
+            _pendingSeekMs = null;
+            await JS.InvokeVoidAsync("podcastPlayer.seek", ms);
+        }
+    }
+
+    private void Select(int transcriptId) => _selectedId = transcriptId;
+
+    private void ToggleWords(ChangeEventArgs e) => _showWords = e.Value is true;
+
+    private void ToggleShading(ChangeEventArgs e)
+    {
+        _shadeConfidence = e.Value is true;
+
+        // Shading is per word, so it needs the word spans rendered.
+        if (_shadeConfidence)
+        {
+            _showWords = true;
+        }
+    }
+
     private void OnJobChanged(int jobId) => InvokeAsync(async () =>
     {
         await LoadAsync();
@@ -210,9 +316,21 @@ else
         await LoadAsync();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Notifier.JobChanged -= OnJobChanged;
         _ticker?.Dispose();
+
+        if (_playerReady)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("podcastPlayer.dispose");
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is already gone; nothing to clean up on the client.
+            }
+        }
     }
 }

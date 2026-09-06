@@ -11,9 +11,9 @@ See [PLAN.md](PLAN.md) for the architecture and full backlog.
 
 ## Status
 
-**M2 — queue and realtime status.** Upload an episode and it is queued; a background worker
-chunks it, posts the chunks one at a time, and the browser watches segments arrive. Search,
-exports and feed ingest are M3 onwards.
+**M3 — library and search.** The archive is searchable, transcripts play back against the audio,
+and they export in five formats. Feed ingest is M4; auth, inline editing and the submission API
+are M5.
 
 How a job runs:
 
@@ -36,6 +36,33 @@ Restarting mid-episode is safe. Jobs left in a working state are re-queued on st
 from the last completed chunk against the stored chunk plan, so the cuts land in exactly the same
 places. Failures retry with exponential backoff up to the attempt cap, then surface the error on
 the jobs page with a Retry button.
+
+### Search
+
+SQLite FTS5 indexes segment text through an external-content table, kept in step by triggers, so
+the index cannot drift from the transcripts no matter what writes them. Results are ranked by
+bm25, grouped by episode, and each hit links straight to that moment in the audio.
+
+Search input is never passed to FTS5 as syntax. Every term is quoted, which turns operators like
+`OR` and `NEAR` into literals and stops a stray bracket being a syntax error rather than a search.
+The last word matches as a prefix, and a quoted phrase stays together.
+
+### Playback
+
+The transcript is a player: clicking a line seeks to it and the current line highlights as the
+audio moves. Two toggles go further — **Words** renders each word separately so the current word
+highlights and any word can be clicked to seek, and **Confidence** shades words by the probability
+whisper reported, which is the fastest way to find mangled proper nouns.
+
+Words are off by default because an hour of audio is roughly 13,000 spans, and the highlighting
+itself runs in the browser rather than over the Blazor circuit: `timeupdate` fires several times a
+second, and a network round trip per tick would lag the audio for no benefit.
+
+### Exports
+
+`SRT`, `WebVTT`, plain text, JSON and Markdown, from the Export menu on any transcript or directly
+from `/episodes/{id}/transcripts/{transcriptId}/export/{format}`. The JSON export carries the word
+timings and per-word probabilities.
 
 ## Configuration
 
@@ -63,6 +90,9 @@ and `.env`.
 | `Transcription:MaxSegmentChars` | `200` | A segment is closed once it runs this long. |
 | `Transcription:MaxAttempts` | `3` | Then the job is left Failed with its error shown. |
 | `Transcription:RetryBaseSeconds` | `30` | First retry delay; doubles each attempt. |
+
+`GET /media/episodes/{id}/audio` serves the source audio with range requests enabled, which is
+what lets the player seek without downloading the whole episode.
 
 `GET /healthz` reports whether `whisper-server` is reachable; it answers 503 when it is not.
 
@@ -112,6 +142,9 @@ src/PodcastTranscription.Web
   Services/       WhisperClient, AudioProcessor, EpisodeImporter, JobQueue,
                   TranscriptionPipeline, TranscriptionWorker
   Services/Chunking/  Silence parsing and the chunk planner
+  Services/Search/    FTS5 query building, ranking and highlighting
+  Services/Export/    SRT, VTT, TXT, JSON and Markdown rendering
+  Endpoints/      Audio streaming and transcript export
   Components/     Blazor pages and layout
 tests/PodcastTranscription.Tests
 ```

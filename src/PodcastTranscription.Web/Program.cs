@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Components;
 using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
+using PodcastTranscription.Web.Endpoints;
 using PodcastTranscription.Web.Services;
+using PodcastTranscription.Web.Services.Search;
 using Serilog;
 using Serilog.Events;
 
@@ -52,6 +54,7 @@ builder.Services.AddScoped<AudioProcessor>();
 builder.Services.AddScoped<EpisodeImporter>();
 builder.Services.AddScoped<TranscriptionPipeline>();
 builder.Services.AddScoped<JobQueue>();
+builder.Services.AddScoped<SearchService>();
 
 // Shared across circuits and the worker, so both sides see the same running jobs and the same
 // stream of progress events.
@@ -85,6 +88,9 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapMediaEndpoints();
+app.MapExportEndpoints();
 
 app.MapGet("/healthz", async (WhisperClient client) =>
 {

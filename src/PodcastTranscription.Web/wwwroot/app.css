@@ -86,3 +86,48 @@ h1:focus {
     flex: 1 1 auto;
     line-height: 1.6;
 }
+
+/* Active line while the audio plays */
+.transcript-line.is-active {
+    background-color: rgba(13, 110, 253, 0.08);
+}
+
+.transcript-line.is-active .transcript-text {
+    font-weight: 500;
+}
+
+.transcript-line[data-segment] {
+    cursor: pointer;
+}
+
+/* Word-level playback highlight */
+.transcript .w {
+    border-radius: 0.2rem;
+    padding: 0 0.05rem;
+}
+
+.transcript .w.is-active-word {
+    background-color: rgba(13, 110, 253, 0.28);
+}
+
+/* Low-confidence shading, only when the toggle is on */
+.transcript.shade-confidence .w.conf-mid {
+    background-color: rgba(255, 193, 7, 0.22);
+}
+
+.transcript.shade-confidence .w.conf-low {
+    background-color: rgba(220, 53, 69, 0.22);
+}
+
+.episode-player {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.episode-player audio {
+    width: 100%;
+}

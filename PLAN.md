@@ -193,14 +193,14 @@ Word timestamps are in scope from M2, which is what keeps that door open.
 ### M3 — Library and search
 > *Done when: search across the whole archive returns highlighted hits that jump to the right timestamp.*
 
-- [ ] **3.1** FTS5 virtual table over segments, kept in sync by trigger
-- [ ] **3.2** Search page: query box, `snippet()` highlighting, grouped by episode
-- [ ] **3.3** Result click → transcript at that timestamp
-- [ ] **3.4** Library page: filter by show/date/state, sort, paginate
-- [ ] **3.5** Audio player with click-to-seek and active-line highlight
-- [ ] **3.5a** Word-level highlight during playback; click any word to seek to it
-- [ ] **3.5b** Low-confidence shading from per-word probability, with a toggle
-- [ ] **3.6** Exports: SRT, VTT, TXT, JSON, Markdown
+- [x] **3.1** FTS5 virtual table over segments, kept in sync by trigger
+- [x] **3.2** Search page: query box, `snippet()` highlighting, grouped by episode
+- [x] **3.3** Result click → transcript at that timestamp
+- [x] **3.4** Library page: filter by show/date/state, sort, paginate
+- [x] **3.5** Audio player with click-to-seek and active-line highlight
+- [x] **3.5a** Word-level highlight during playback; click any word to seek to it
+- [x] **3.5b** Low-confidence shading from per-word probability, with a toggle
+- [x] **3.6** Exports: SRT, VTT, TXT, JSON, Markdown
 
 ### M4 — Ingest
 > *Done when: subscribe to a feed and new episodes transcribe themselves overnight.*

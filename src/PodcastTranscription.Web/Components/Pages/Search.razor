@@ -1,0 +1,112 @@
+@page "/search"
+@using PodcastTranscription.Web.Services
+@using PodcastTranscription.Web.Services.Search
+@inject SearchService Finder
+@inject NavigationManager Navigation
+
+<PageTitle>Search</PageTitle>
+
+<h1 class="h3 mb-3">Search</h1>
+
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="input-group">
+            <input class="form-control" placeholder="Search every transcript…" @bind="_query"
+                   @bind:event="oninput" @onkeydown="OnKeyDown" aria-label="Search transcripts" />
+            <button class="btn btn-primary" @onclick="RunSearch" disabled="@_searching">Search</button>
+        </div>
+        <div class="form-text">
+            Words are combined with AND, and the last one matches as a prefix.
+            Wrap a phrase in quotes to keep it together.
+        </div>
+    </div>
+</div>
+
+@if (_searching)
+{
+    <p class="text-muted">Searching…</p>
+}
+else if (_results is { } results)
+{
+    @if (results.TotalHits == 0)
+    {
+        <p class="text-muted">No matches for <strong>@results.Query</strong>.</p>
+    }
+    else
+    {
+        <p class="text-muted small">
+            @results.TotalHits @(results.TotalHits == 1 ? "match" : "matches")
+            across @results.Episodes.Count @(results.Episodes.Count == 1 ? "episode" : "episodes")
+        </p>
+
+        @foreach (var episode in results.Episodes)
+        {
+            <div class="card mb-3">
+                <div class="card-header py-2">
+                    <a href="/episodes/@episode.EpisodeId" class="fw-semibold text-decoration-none">@episode.Title</a>
+                    @if (!string.IsNullOrWhiteSpace(episode.Show))
+                    {
+                        <span class="text-muted small ms-2">@episode.Show</span>
+                    }
+                    <span class="badge bg-light text-dark ms-2">@episode.Hits.Count</span>
+                </div>
+                <div class="list-group list-group-flush">
+                    @foreach (var hit in episode.Hits)
+                    {
+                        @* Jumps to the transcript with the player already seeked to this moment. *@
+                        <a class="list-group-item list-group-item-action d-flex gap-3 align-items-baseline"
+                           href="/episodes/@episode.EpisodeId?t=@hit.StartMs">
+                            <span class="font-monospace text-muted small">@TimeFormat.Clock(hit.StartMs)</span>
+                            <span>@((MarkupString)SearchHighlighter.ToHtml(hit.Snippet))</span>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+    }
+}
+
+@code {
+    private string? _query;
+    private SearchResults? _results;
+    private bool _searching;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (q.TryGetValue("q", out var value) && !string.IsNullOrWhiteSpace(value))
+        {
+            _query = value!;
+            await RunSearch();
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await RunSearch();
+        }
+    }
+
+    private async Task RunSearch()
+    {
+        if (string.IsNullOrWhiteSpace(_query))
+        {
+            _results = null;
+            return;
+        }
+
+        _searching = true;
+        try
+        {
+            _results = await Finder.SearchAsync(_query);
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+}
