@@ -1,11 +1,10 @@
 @page "/upload"
+@using Microsoft.AspNetCore.Components.Endpoints
 @using PodcastTranscription.Web.Services
-@using PodcastTranscription.Web.Services.Ingest
-@inject EpisodeImporter Importer
-@inject JobQueue Queue
+@* Rendered statically so the forms are ordinary browser posts. Uploading a 2 GB episode over the
+   SignalR circuit would be slow, and would fail silently whenever the circuit has not connected. *@
+@attribute [ExcludeFromInteractiveRouting]
 @inject MediaStore Media
-@inject NavigationManager Navigation
-@inject ILogger<Upload> Log
 
 <PageTitle>Add episode</PageTitle>
 
@@ -13,143 +12,85 @@
 
 <div class="row">
     <div class="col-lg-7">
+        @if (Error is not null)
+        {
+            <div class="alert alert-danger">@Error</div>
+        }
+
         <ul class="nav nav-tabs mb-3">
             <li class="nav-item">
-                <button class="nav-link @(_mode == Mode.File ? "active" : "")" @onclick="() => _mode = Mode.File">
-                    Upload a file
-                </button>
+                <a class="nav-link @(IsUrlTab ? "" : "active")" href="/upload">Upload a file</a>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(_mode == Mode.Url ? "active" : "")" @onclick="() => _mode = Mode.Url">
-                    From a URL
-                </button>
+                <a class="nav-link @(IsUrlTab ? "active" : "")" href="/upload?tab=url">From a URL</a>
             </li>
         </ul>
 
-        <div class="mb-3">
-            <label class="form-label" for="title">Title <span class="text-muted">(optional)</span></label>
-            <input id="title" class="form-control" @bind="_title" disabled="@_busy"
-                   placeholder="@(_mode == Mode.File ? "Defaults to the file name" : "Defaults to what yt-dlp reports")" />
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label" for="show">Show <span class="text-muted">(optional)</span></label>
-            <input id="show" class="form-control" @bind="_show" disabled="@_busy" />
-        </div>
-
-        @if (_mode == Mode.File)
+        @if (IsUrlTab)
         {
-            <div class="mb-3">
-                <label class="form-label" for="file">Audio file</label>
-                <InputFile id="file" class="form-control" OnChange="OnFileSelected" disabled="@_busy" />
-                <div class="form-text">Anything ffmpeg can decode. Up to @TimeFormat.Size(Media.MaxUploadBytes).</div>
-            </div>
+            <form method="post" action="/upload/url">
+                <AntiforgeryToken />
+
+                <div class="mb-3">
+                    <label class="form-label" for="url-title">Title <span class="text-muted">(optional)</span></label>
+                    <input id="url-title" name="title" class="form-control" placeholder="Defaults to what yt-dlp reports" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="url-show">Show <span class="text-muted">(optional)</span></label>
+                    <input id="url-show" name="show" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="url">Episode URL</label>
+                    <input id="url" name="url" class="form-control" required
+                           placeholder="https://example.com/episode.mp3" />
+                    <div class="form-text">
+                        Downloaded with yt-dlp, so a direct audio link or a page it recognises both work.
+                        The download happens in the job queue — you do not have to wait here.
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" type="submit">Fetch and transcribe</button>
+            </form>
         }
         else
         {
-            <div class="mb-3">
-                <label class="form-label" for="url">Episode URL</label>
-                <div class="input-group">
-                    <input id="url" class="form-control" placeholder="https://example.com/episode.mp3"
-                           @bind="_url" disabled="@_busy" />
-                    <button class="btn btn-primary" @onclick="ImportUrl" disabled="@_busy">Fetch</button>
-                </div>
-                <div class="form-text">
-                    Downloaded with yt-dlp, so a direct audio link or a page it recognises both work.
-                    The download happens in the job queue — you do not have to wait here.
-                </div>
-            </div>
-        }
+            <form method="post" action="/upload/file" enctype="multipart/form-data">
+                <AntiforgeryToken />
 
-        @if (_status is not null)
-        {
-            <div class="alert @(_failed ? "alert-danger" : "alert-info")">@_status</div>
-        }
+                <div class="mb-3">
+                    <label class="form-label" for="title">Title <span class="text-muted">(optional)</span></label>
+                    <input id="title" name="title" class="form-control" placeholder="Defaults to the file name" />
+                </div>
 
-        @if (_busy)
-        {
-            <div class="progress" role="progressbar" aria-label="Working">
-                <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
-            </div>
+                <div class="mb-3">
+                    <label class="form-label" for="show">Show <span class="text-muted">(optional)</span></label>
+                    <input id="show" name="show" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="file">Audio file</label>
+                    <input id="file" name="file" type="file" class="form-control" required
+                           accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.mp4,.mkv" />
+                    <div class="form-text">
+                        Anything ffmpeg can decode. Up to @TimeFormat.Size(Media.MaxUploadBytes).
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" type="submit">Upload and transcribe</button>
+                <div class="form-text mt-2">
+                    Large files take a while to upload — the page stays here until the transfer finishes.
+                </div>
+            </form>
         }
     </div>
 </div>
 
 @code {
-    private enum Mode { File, Url }
+    [SupplyParameterFromQuery(Name = "tab")] private string? Tab { get; set; }
 
-    private Mode _mode = Mode.File;
-    private string? _title;
-    private string? _show;
-    private string? _url;
-    private string? _status;
-    private bool _busy;
-    private bool _failed;
+    [SupplyParameterFromQuery(Name = "error")] private string? Error { get; set; }
 
-    private async Task OnFileSelected(InputFileChangeEventArgs e)
-    {
-        var file = e.File;
-        _busy = true;
-        _failed = false;
-        _status = $"Uploading {file.Name} ({TimeFormat.Size(file.Size)})…";
-        StateHasChanged();
-
-        try
-        {
-            await using var stream = file.OpenReadStream(Media.MaxUploadBytes);
-            var result = await Importer.ImportAsync(stream, file.Name, _title, _show);
-
-            if (!result.WasDuplicate)
-            {
-                await Queue.EnqueueAsync(result.Episode.Id);
-            }
-
-            _status = result.WasDuplicate
-                ? "That audio is already in the library — opening the existing episode."
-                : "Imported and queued.";
-            StateHasChanged();
-
-            Navigation.NavigateTo($"/episodes/{result.Episode.Id}");
-        }
-        catch (Exception ex)
-        {
-            Log.LogError(ex, "Upload of {FileName} failed", file.Name);
-            _failed = true;
-            _status = $"Upload failed: {ex.Message}";
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task ImportUrl()
-    {
-        if (string.IsNullOrWhiteSpace(_url))
-        {
-            return;
-        }
-
-        _busy = true;
-        _failed = false;
-        _status = "Recording the episode…";
-
-        try
-        {
-            var episode = await Importer.ImportFromUrlAsync(_url, _title, _show);
-            await Queue.EnqueueAsync(episode.Id);
-
-            Navigation.NavigateTo($"/episodes/{episode.Id}");
-        }
-        catch (Exception ex)
-        {
-            Log.LogWarning(ex, "URL ingest of {Url} failed", _url);
-            _failed = true;
-            _status = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
+    private bool IsUrlTab => string.Equals(Tab, "url", StringComparison.OrdinalIgnoreCase);
 }

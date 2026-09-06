@@ -68,7 +68,9 @@ public class FeedServiceTests : IDisposable
     }
 
     private static FeedService CreateService(AppDbContext db, IHttpClientFactory http, IngestOptions? options = null) =>
-        new(db, CreateQueue(db), http, Options.Create(options ?? new IngestOptions()),
+        new(db, CreateQueue(db), http,
+            new PodcastUrlResolver(http, NullLogger<PodcastUrlResolver>.Instance),
+            Options.Create(options ?? new IngestOptions()),
             NullLogger<FeedService>.Instance);
 
     [Fact]

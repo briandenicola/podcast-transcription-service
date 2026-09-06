@@ -52,6 +52,17 @@ Directory.CreateDirectory(dataDirectory);
 // Components get their own short-lived context from the factory; scoped services keep the
 // familiar injected AppDbContext. Blazor circuits outlive a request, so a single scoped
 // context shared across a page's lifetime would be a concurrency bug waiting to happen.
+// A podcast episode is far larger than the 30 MB Kestrel and the 128 MB form parser allow by
+// default, so both ceilings follow the configured limit.
+var maxUploadBytes = (long)storage.MaxUploadMb * 1024 * 1024;
+
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = maxUploadBytes);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = maxUploadBytes;
+    options.ValueLengthLimit = int.MaxValue;
+});
+
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "app.db")}"));
 builder.Services.AddScoped<AppDbContext>(sp =>
@@ -76,6 +87,7 @@ builder.Services.AddScoped<JobQueue>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<YtDlpClient>();
 builder.Services.AddScoped<FeedService>();
+builder.Services.AddScoped<PodcastUrlResolver>();
 builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddHttpClient(nameof(FeedService));
 
@@ -167,7 +179,15 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Re-executing to a friendly page is right for someone browsing, and actively misleading for
+// everything else: it turned an unauthenticated /_blazor/negotiate into a 404, which reads like
+// a routing bug rather than an expired session.
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/_blazor")
+            && !context.Request.Path.StartsWithSegments("/_framework")
+            && !context.Request.Path.StartsWithSegments("/api")
+            && !context.Request.Path.StartsWithSegments("/healthz"),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -179,6 +199,7 @@ app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+app.MapUploadEndpoints();
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 

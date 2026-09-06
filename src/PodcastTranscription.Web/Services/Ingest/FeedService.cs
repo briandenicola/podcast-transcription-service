@@ -22,6 +22,7 @@ public class FeedService(
     AppDbContext db,
     JobQueue queue,
     IHttpClientFactory httpClientFactory,
+    PodcastUrlResolver resolver,
     IOptions<IngestOptions> options,
     ILogger<FeedService> log)
 {
@@ -34,7 +35,9 @@ public class FeedService(
             throw new IngestException($"'{rssUrl}' is not an http or https URL.");
         }
 
-        var normalized = rssUrl.Trim();
+        // An Apple Podcasts link is what people actually have to hand; swap it for the real feed
+        // before anything else looks at it.
+        var normalized = (await resolver.ResolveAsync(rssUrl, ct)).Trim();
 
         var existing = await db.Feeds.FirstOrDefaultAsync(f => f.RssUrl == normalized, ct);
         if (existing is not null)

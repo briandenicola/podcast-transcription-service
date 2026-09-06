@@ -69,6 +69,10 @@ records the existing catalogue without queueing it — subscribing to a show wit
 history should not enqueue ten years of audio. **Backfill** on a feed is the deliberate way to
 pull history: it queues the most recent recorded episodes that have never been transcribed.
 
+You can paste an **Apple Podcasts link** rather than hunting for the RSS URL — the show id is
+exchanged for the real feed through Apple's public lookup API. Anything else is treated as a feed
+URL directly.
+
 Items are matched on the feed's own `<guid>`, falling back to the enclosure URL for feeds that
 omit one, so re-polling never re-adds an episode. Once audio is downloaded it is hashed, and a
 byte-identical match against something already in the library fails the job immediately rather
@@ -115,6 +119,14 @@ bm25, grouped by episode, and each hit links straight to that moment in the audi
 Search input is never passed to FTS5 as syntax. Every term is quoted, which turns operators like
 `OR` and `NEAR` into literals and stops a stray bracket being a syntax error rather than a search.
 The last word matches as a prefix, and a quoted phrase stays together.
+
+### Uploads
+
+Uploading is an ordinary form post rather than a Blazor `InputFile`. Streaming a 2 GB episode
+over the SignalR circuit is slow, and it fails silently whenever the circuit has not connected —
+the page looks fine and the button does nothing. A plain multipart POST is faster for large files
+and works with no JavaScript running at all. `Storage:MaxUploadMb` raises both the Kestrel and
+form-parser body limits to match.
 
 ### Playback
 
