@@ -53,6 +53,15 @@ public class TranscriptionWorker(
         {
             try
             {
+                // Restarting whisper-server with a large model takes a while. Claiming a job in
+                // that window would fail it and spend one of its attempts on a condition that
+                // clears itself, so wait instead.
+                if (!await WhisperIsReadyAsync(stoppingToken))
+                {
+                    await Task.Delay(idleDelay, stoppingToken);
+                    continue;
+                }
+
                 var jobId = await ClaimNextJobAsync(stoppingToken);
                 if (jobId is null)
                 {
@@ -75,6 +84,24 @@ public class TranscriptionWorker(
         }
 
         log.LogInformation("Worker {Worker} stopped", workerIndex);
+    }
+
+    private async Task<bool> WhisperIsReadyAsync(CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var whisper = scope.ServiceProvider.GetRequiredService<WhisperClient>();
+
+        var health = await whisper.CheckHealthAsync(ct);
+
+        if (health.ModelLoading)
+        {
+            log.LogInformation("whisper-server is still loading its model; holding the queue");
+            return false;
+        }
+
+        // Unreachable is left to the job itself: the error belongs on the job, where it is
+        // visible, rather than only in the log.
+        return true;
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ public static class HealthEndpoints
         // call, and neither of those can log in. It reports reachability, never configuration.
         app.MapGet("/healthz", async (WhisperClient whisper, AppDbContext db, CancellationToken ct) =>
         {
-            var whisperReachable = await whisper.IsReachableAsync(ct);
+            var health = await whisper.CheckHealthAsync(ct);
 
             bool databaseReachable;
             int? queueDepth = null;
@@ -27,12 +27,21 @@ public static class HealthEndpoints
                 databaseReachable = false;
             }
 
-            var healthy = whisperReachable && databaseReachable;
+            var healthy = health.Ready && databaseReachable;
 
             return Results.Json(new
             {
-                status = healthy ? "healthy" : "degraded",
-                whisper = new { endpoint = whisper.Endpoint, model = whisper.Model, reachable = whisperReachable },
+                // "starting" rather than "degraded" while a model loads: nothing is wrong, and a
+                // monitor should not page anyone for it.
+                status = healthy ? "healthy" : health.ModelLoading ? "starting" : "degraded",
+                whisper = new
+                {
+                    endpoint = whisper.Endpoint,
+                    model = whisper.Model,
+                    reachable = health.Reachable,
+                    modelLoading = health.ModelLoading,
+                    status = health.Status
+                },
                 database = new { reachable = databaseReachable, queued = queueDepth }
             },
             statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);

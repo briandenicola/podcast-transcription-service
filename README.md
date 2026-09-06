@@ -216,6 +216,18 @@ and `.env`.
 `GET /media/episodes/{id}/audio` serves the source audio with range requests enabled, which is
 what lets the player seek without downloading the whole episode.
 
+### Swapping models
+
+`whisper-server` loads its model at startup and exposes no way to ask which one, so restarting it
+with a different `-m` is the only way to change model, and `WHISPER_MODEL` must be updated to
+match — it is recorded against every transcript, and a wrong value silently mislabels a
+comparison between two runs.
+
+Loading a multi-gigabyte model takes a while, and the server reports `loading model` on its
+`/health` route in the meantime. The worker holds the queue while that is true rather than
+claiming a job that would fail and spend one of its retries, `/healthz` answers `starting`
+rather than `degraded`, and the library banner says so.
+
 `GET /healthz` reports whether `whisper-server` and the database are reachable, and how many jobs
 are queued; it answers 503 when anything is down. It is deliberately anonymous — the container
 healthcheck and any external monitor cannot log in — and reports reachability, never configuration.

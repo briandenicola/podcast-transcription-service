@@ -15,13 +15,13 @@
     <a class="btn btn-primary" href="/upload">Add episode</a>
 </div>
 
-<div class="alert @(_whisperReachable ? "alert-success" : "alert-warning") d-flex justify-content-between align-items-center py-2">
+<div class="alert @WhisperAlertClass d-flex justify-content-between align-items-center py-2">
     <span>
         <strong>whisper-server</strong>
         <code class="ms-1">@Whisper.Endpoint</code>
         <span class="ms-2 text-muted">model @Whisper.Model</span>
     </span>
-    <span>@(_whisperReachable ? "reachable" : "unreachable")</span>
+    <span>@WhisperStatusText</span>
 </div>
 
 <div class="row g-2 align-items-end mb-3">
@@ -150,7 +150,21 @@ else
 
     private List<Row>? _episodes;
     private List<string> _shows = [];
-    private bool _whisperReachable;
+    private WhisperHealth? _whisperHealth;
+
+    private string WhisperAlertClass => _whisperHealth switch
+    {
+        { Ready: true } => "alert-success",
+        { ModelLoading: true } => "alert-info",
+        _ => "alert-warning"
+    };
+
+    private string WhisperStatusText => _whisperHealth switch
+    {
+        { Ready: true } => "reachable",
+        { ModelLoading: true } => "loading model — the queue is waiting",
+        _ => "unreachable"
+    };
 
     private string? _titleFilter;
     private string _showFilter = string.Empty;
@@ -164,7 +178,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _shows = await Search.GetShowsAsync();
-        _whisperReachable = await Whisper.IsReachableAsync();
+        _whisperHealth = await Whisper.CheckHealthAsync();
         await LoadAsync();
     }
 

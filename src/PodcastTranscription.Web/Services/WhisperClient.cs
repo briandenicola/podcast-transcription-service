@@ -108,27 +108,68 @@ public class WhisperClient(HttpClient http, IOptions<WhisperOptions> options, IL
     }
 
     /// <summary>
-    /// Cheap reachability probe. whisper-server exposes no dedicated health route, so any HTTP
-    /// answer at all — 404 included — means the process is up and listening.
+    /// Asks whisper-server how it is. Its <c>/health</c> route distinguishes a server that is up
+    /// from one still reading a model off disk — a large model takes a while, and treating
+    /// "loading" as ready means jobs fail and burn their retries for no reason.
     /// </summary>
-    public async Task<bool> IsReachableAsync(CancellationToken ct = default)
+    public async Task<WhisperHealth> CheckHealthAsync(CancellationToken ct = default)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(5));
-            using var response = await http.GetAsync("/", HttpCompletionOption.ResponseHeadersRead, cts.Token);
-            return true;
+
+            using var response = await http.GetAsync("/health", cts.Token);
+            var body = await response.Content.ReadAsStringAsync(cts.Token);
+
+            // Older builds have no /health at all. Any HTTP answer still means the process is
+            // listening, so fall back to treating it as up rather than reporting it down.
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new WhisperHealth(true, false, "up (no /health route)");
+            }
+
+            var status = ReadStatus(body);
+            var loading = status?.Contains("loading", StringComparison.OrdinalIgnoreCase) == true;
+
+            return new WhisperHealth(true, loading, status ?? "ok");
         }
         catch (Exception ex)
         {
             log.LogDebug(ex, "whisper-server at {Endpoint} is not reachable", _options.BaseUrl);
-            return false;
+            return new WhisperHealth(false, false, "unreachable");
+        }
+    }
+
+    /// <summary>True when the server answers at all, whatever it is doing.</summary>
+    public async Task<bool> IsReachableAsync(CancellationToken ct = default) =>
+        (await CheckHealthAsync(ct)).Reachable;
+
+    private static string? ReadStatus(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.TryGetProperty("status", out var status) ? status.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
+}
+
+/// <summary>
+/// What whisper-server reported. <see cref="ModelLoading"/> is the state worth acting on: the
+/// server is there, but a request sent now would fail.
+/// </summary>
+public record WhisperHealth(bool Reachable, bool ModelLoading, string Status)
+{
+    /// <summary>Up and able to take work.</summary>
+    public bool Ready => Reachable && !ModelLoading;
 }
 
 public class WhisperException(string message, Exception? inner = null) : Exception(message, inner);

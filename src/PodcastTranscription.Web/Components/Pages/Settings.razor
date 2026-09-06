@@ -29,9 +29,7 @@
         <div class="card mb-4">
             <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
                 <span>whisper-server</span>
-                <span class="badge @(_whisperReachable ? "bg-success" : "bg-danger")">
-                    @(_whisperReachable ? "reachable" : "unreachable")
-                </span>
+                <span class="badge @WhisperBadgeClass">@WhisperStatusText</span>
             </div>
             <div class="card-body">
                 <dl class="row mb-0 small">
@@ -167,7 +165,21 @@
 }
 
 @code {
-    private bool _whisperReachable;
+    private WhisperHealth? _whisperHealth;
+
+    private string WhisperBadgeClass => _whisperHealth switch
+    {
+        { Ready: true } => "bg-success",
+        { ModelLoading: true } => "bg-info text-dark",
+        _ => "bg-danger"
+    };
+
+    private string WhisperStatusText => _whisperHealth switch
+    {
+        { Ready: true } => "reachable",
+        { ModelLoading: true } => "loading model",
+        _ => "unreachable"
+    };
     private bool _busy;
     private bool _failed;
     private string? _message;
@@ -194,7 +206,7 @@
 
         (_sourceBytes, _preparedBytes) = Maintenance.MeasureMediaUsage();
         _backups = Maintenance.ListBackups();
-        _whisperReachable = await Whisper.IsReachableAsync();
+        _whisperHealth = await Whisper.CheckHealthAsync();
     }
 
     private async Task CheckWhisper()
@@ -202,11 +214,14 @@
         _busy = true;
         try
         {
-            _whisperReachable = await Whisper.IsReachableAsync();
-            _failed = !_whisperReachable;
-            _message = _whisperReachable
-                ? $"{Whisper.Endpoint} answered."
-                : $"{Whisper.Endpoint} did not answer.";
+            _whisperHealth = await Whisper.CheckHealthAsync();
+            _failed = !_whisperHealth.Reachable;
+            _message = _whisperHealth switch
+            {
+                { Ready: true } => $"{Whisper.Endpoint} answered.",
+                { ModelLoading: true } => $"{Whisper.Endpoint} is still loading its model.",
+                _ => $"{Whisper.Endpoint} did not answer."
+            };
         }
         finally
         {
