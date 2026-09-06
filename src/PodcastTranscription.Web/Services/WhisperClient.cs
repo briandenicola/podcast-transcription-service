@@ -55,6 +55,23 @@ public class WhisperClient(HttpClient http, IOptions<WhisperOptions> options, IL
         var temperature = request.Temperature ?? _options.Temperature;
         content.Add(new StringContent(temperature.ToString(CultureInfo.InvariantCulture)), "temperature");
 
+        // Decoding parameters are sent explicitly rather than left to the server's defaults.
+        // These are what stand between a difficult passage and a repetition loop, and leaving
+        // them implicit means they change under you when the server is upgraded or restarted
+        // with different flags.
+        Add("temperature_inc", _options.TemperatureIncrement);
+        Add("entropy_thold", _options.EntropyThreshold);
+        Add("logprob_thold", _options.LogProbThreshold);
+        Add("no_speech_thold", _options.NoSpeechThreshold);
+        Add("max_context", _options.MaxContext);
+        Add("beam_size", _options.BeamSize);
+        Add("best_of", _options.BestOf);
+
+        if (_options.SuppressNonSpeechTokens)
+        {
+            content.Add(new StringContent("true"), "suppress_nst");
+        }
+
         if (request.MaxLen is { } maxLen)
         {
             content.Add(new StringContent(maxLen.ToString(CultureInfo.InvariantCulture)), "max_len");
@@ -64,6 +81,9 @@ public class WhisperClient(HttpClient http, IOptions<WhisperOptions> options, IL
         {
             content.Add(new StringContent("true"), "split_on_word");
         }
+
+        void Add(string name, double value) =>
+            content.Add(new StringContent(value.ToString(CultureInfo.InvariantCulture)), name);
 
         var sw = Stopwatch.StartNew();
         log.LogInformation("Posting {File} ({Bytes:N0} bytes) to {Endpoint}/inference",

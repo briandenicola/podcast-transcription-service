@@ -128,6 +128,16 @@ public class TranscriptionPipeline(
             }
         }
 
+        // Look over the finished transcript before declaring it good. A loop that ran for a
+        // whole chunk is obvious in aggregate and invisible one segment at a time.
+        var allSegments = await db.Segments.Where(s => s.TranscriptId == transcript.Id).ToListAsync(ct);
+        if (RepetitionDetector.Detect(allSegments) is { } repetition)
+        {
+            transcript.QualityWarning = RepetitionDetector.Describe(repetition);
+
+            log.LogWarning("Job {JobId}: {Warning}", job.Id, transcript.QualityWarning);
+        }
+
         transcript.IsComplete = true;
         transcript.CompletedAt = DateTimeOffset.UtcNow;
         transcript.RealtimeFactor = wallClock.Elapsed.TotalSeconds > 0 && audioSecondsThisRun > 0

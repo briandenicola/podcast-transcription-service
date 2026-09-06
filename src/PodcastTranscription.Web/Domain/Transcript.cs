@@ -25,6 +25,13 @@ public class Transcript
     /// </summary>
     public bool IsComplete { get; set; }
 
+    /// <summary>
+    /// Set when the transcript looks degenerate — a repetition loop, most often. Null when it
+    /// looks fine. Recorded rather than acted on: the transcript may still be mostly good, and
+    /// discarding one on a heuristic would be worse than flagging it.
+    /// </summary>
+    public string? QualityWarning { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
 

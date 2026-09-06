@@ -177,6 +177,14 @@ else
                 </div>
             </div>
 
+            @if (selected.QualityWarning is { } warning)
+            {
+                <div class="alert alert-warning d-flex justify-content-between align-items-center">
+                    <span><strong>Possible transcription fault.</strong> @warning</span>
+                    <button class="btn btn-sm btn-outline-dark" @onclick="Enqueue">Re-transcribe</button>
+                </div>
+            }
+
             @if (_showWords && selected.Segments.All(s => string.IsNullOrEmpty(s.WordsJson)))
             {
                 <div class="alert alert-secondary py-2 small">

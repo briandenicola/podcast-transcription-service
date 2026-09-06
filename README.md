@@ -128,6 +128,26 @@ the page looks fine and the button does nothing. A plain multipart POST is faste
 and works with no JavaScript running at all. `Storage:MaxUploadMb` raises both the Kestrel and
 form-parser body limits to match.
 
+### When whisper gets stuck
+
+Whisper sometimes latches onto a phrase and emits it over and over to the end of a chunk. It is a
+decoder failure, not a fault in the audio, and it produces a transcript that looks plausible
+line by line while being useless in aggregate.
+
+The decoding parameters above are sent explicitly on every request rather than left to whatever
+the server was started with, because those are exactly the settings that prevent it — temperature
+fallback, the entropy and log-probability thresholds that trigger it, and carrying no context
+between windows so a loop cannot feed itself.
+
+When one happens anyway, the app notices: a finished transcript with a long run of identical
+consecutive lines is flagged on the episode page with a Re-transcribe button. The transcript is
+still kept — the audio may genuinely repeat, and discarding one on a heuristic would be worse
+than flagging it.
+
+If it recurs on a particular episode, try a different model. Loops are model-specific often
+enough that switching is the fastest fix, and the model is recorded per transcript so the two
+runs can be compared.
+
 ### Playback
 
 The transcript is a player: clicking a line seeks to it and the current line highlights as the
@@ -157,6 +177,13 @@ and `.env`.
 | `Whisper:Model` | `large-v3-turbo-q5_0` | Must match what `whisper-server` was started with. Recorded against each transcript so the back catalogue can be reprocessed and compared. |
 | `Whisper:Language` | `auto` | ISO code, or `auto` to detect. |
 | `Whisper:Prompt` | _(none)_ | Biases decoding toward names and jargon. The cheapest accuracy win available. |
+| `Whisper:TemperatureIncrement` | `0.2` | Whisper's own defence against repetition loops: how much to raise the temperature when a decode looks degenerate. Zero disables the fallback. |
+| `Whisper:EntropyThreshold` | `2.4` | Entropy above which a decode is retried. Repetitive text compresses well, so a loop shows up here first. Lower is more aggressive. |
+| `Whisper:LogProbThreshold` | `-1.0` | Average log probability below which a decode is retried. |
+| `Whisper:NoSpeechThreshold` | `0.6` | Above this, a window is treated as silence. |
+| `Whisper:MaxContext` | `0` | Tokens carried into the next window. Carried text is what lets a loop feed itself. |
+| `Whisper:SuppressNonSpeechTokens` | `true` | Music and applause are where hallucinations usually start. |
+| `Whisper:BeamSize` / `BestOf` | `5` | Beam search is slower and markedly less prone to looping. |
 | `Whisper:RequestTimeoutMinutes` | `120` | The `HttpClient` default of 100 seconds fails on any real episode. |
 | `Storage:DataPath` | `var/data` | Holds `app.db` and rolling logs. `/data` in the container. |
 | `Storage:MediaPath` | `var/media` | Source audio and prepared 16 kHz WAVs. `/media` in the container. |
