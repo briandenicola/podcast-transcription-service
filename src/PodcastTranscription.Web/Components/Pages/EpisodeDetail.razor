@@ -9,6 +9,7 @@
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject JobQueue Queue
 @inject JobNotifier Notifier
+@inject DeletionService Deletion
 @inject WhisperClient Whisper
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -33,6 +34,13 @@ else
         <div class="text-end">
             @if (_activeJob is null)
             {
+                <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+                    <ConfirmButton Text="Delete episode"
+                                   ConfirmText="Delete episode and audio"
+                                   Title="Delete this episode, its transcripts and its audio"
+                                   ConfirmTitle="Removes the audio too — this cannot be undone"
+                                   OnConfirmed="DeleteEpisode" />
+                </div>
                 <div class="input-group">
                     @* Recorded against the transcript, so the back catalogue can be reprocessed
                        on a better model and the results compared. *@
@@ -90,6 +98,11 @@ else
         </div>
     }
 
+    @if (_deletionMessage is not null)
+    {
+        <div class="alert alert-warning py-2">@_deletionMessage</div>
+    }
+
     @if (_lastFailure is { } failure)
     {
         <div class="alert alert-danger d-flex justify-content-between align-items-center">
@@ -137,44 +150,59 @@ else
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
-                    <div class="form-check form-switch mb-0">
+                    <div class="form-check form-switch mb-0"
+                         title="Turn each line into a text box so you can correct what whisper misheard. Changes save as you leave a line, and search picks them up.">
                         <input class="form-check-input" type="checkbox" id="edit-mode"
                                checked="@_editing" @onchange="ToggleEditing" />
-                        <label class="form-check-label small" for="edit-mode">Edit</label>
+                        <label class="form-check-label small" for="edit-mode">Edit text</label>
                     </div>
                     @if (_transcripts.Count > 1)
                     {
-                        <div class="form-check form-switch mb-0">
+                        <div class="form-check form-switch mb-0"
+                             title="Show this transcript beside the previous run, so two models can be compared line by line.">
                             <input class="form-check-input" type="checkbox" id="compare-mode"
                                    checked="@_comparing" @onchange="ToggleCompare" />
-                            <label class="form-check-label small" for="compare-mode">Compare</label>
+                            <label class="form-check-label small" for="compare-mode">Compare runs</label>
                         </div>
                     }
-                    <div class="form-check form-switch mb-0">
+                    <div class="form-check form-switch mb-0"
+                         title="Show every word separately: the word being spoken highlights as the audio plays, and clicking any word jumps the player to it.">
                         <input class="form-check-input" type="checkbox" id="show-words"
                                checked="@_showWords" @onchange="ToggleWords" />
-                        <label class="form-check-label small" for="show-words">Words</label>
+                        <label class="form-check-label small" for="show-words">Word timings</label>
                     </div>
-                    <div class="form-check form-switch mb-0">
+                    <div class="form-check form-switch mb-0"
+                         title="Shade the words whisper was least sure of, amber through red. The quickest way to find mangled names.">
                         <input class="form-check-input" type="checkbox" id="shade-confidence"
                                checked="@_shadeConfidence" @onchange="ToggleShading" />
-                        <label class="form-check-label small" for="shade-confidence">Confidence</label>
+                        <label class="form-check-label small" for="shade-confidence">Low confidence</label>
                     </div>
 
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"
-                                aria-expanded="false">Export</button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            @foreach (var (format, label) in ExportFormats)
-                            {
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="/episodes/@EpisodeId/transcripts/@selected.Id/export/@format">@label</a>
-                                </li>
-                            }
-                        </ul>
-                    </div>
+                    @* Throws away one run without touching the audio, so it can be transcribed again. *@
+                    <ConfirmButton Text="Delete transcript"
+                                   ConfirmText="Delete this transcript"
+                                   Title="Delete this transcript, keeping the episode and its audio"
+                                   ConfirmTitle="The episode and its audio are kept"
+                                   OnConfirmed="() => DeleteTranscript(selected.Id)" />
+
+                    @* Plain links rather than a dropdown: a dropdown needs Bootstrap's JavaScript,
+                       which this app does not load, so the button did nothing at all. *@
+                    <span class="export-links small">
+                        <span class="text-muted me-1">Export</span>
+                        @foreach (var (format, label, extension) in ExportFormats)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary"
+                               href="/episodes/@EpisodeId/transcripts/@selected.Id/export/@format"
+                               title="@label">@extension</a>
+                        }
+                    </span>
                 </div>
+            </div>
+
+            <div class="text-muted small mb-2 toolbar-hint">
+                <strong>Edit text</strong> corrects what whisper misheard ·
+                <strong>Word timings</strong> highlights each word as it plays and lets you click one to jump there ·
+                <strong>Low confidence</strong> shades the words it was unsure of
             </div>
 
             @if (selected.QualityWarning is { } warning)
@@ -229,13 +257,13 @@ else
 @code {
     [Parameter] public int EpisodeId { get; set; }
 
-    private static readonly (string Format, string Label)[] ExportFormats =
+    private static readonly (string Format, string Label, string Extension)[] ExportFormats =
     [
-        ("srt", "SubRip (.srt)"),
-        ("vtt", "WebVTT (.vtt)"),
-        ("txt", "Plain text (.txt)"),
-        ("json", "JSON (.json)"),
-        ("md", "Markdown (.md)")
+        ("srt", "SubRip subtitles — for video editors and players", "SRT"),
+        ("vtt", "WebVTT subtitles — for the web", "VTT"),
+        ("txt", "Plain text, no timestamps", "TXT"),
+        ("json", "JSON with word timings and per-word confidence", "JSON"),
+        ("md", "Markdown with a timestamp on every line", "MD")
     ];
 
     private Episode? _episode;
@@ -244,6 +272,7 @@ else
     private Job? _activeJob;
     private Job? _lastFailure;
     private Timer? _ticker;
+    private string? _deletionMessage;
     private bool _hasAudio;
     private bool _showWords;
     private bool _shadeConfidence;
@@ -416,6 +445,32 @@ else
     {
         await Queue.RetryAsync(jobId);
         await LoadAsync();
+    }
+
+    private async Task DeleteTranscript(int transcriptId)
+    {
+        var result = await Deletion.DeleteTranscriptAsync(transcriptId);
+        _deletionMessage = result.Refusal;
+
+        if (result.Deleted)
+        {
+            _selectedId = null;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteEpisode()
+    {
+        var result = await Deletion.DeleteEpisodeAsync(EpisodeId);
+
+        if (result.Deleted)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        _deletionMessage = result.Refusal;
     }
 
     public async ValueTask DisposeAsync()

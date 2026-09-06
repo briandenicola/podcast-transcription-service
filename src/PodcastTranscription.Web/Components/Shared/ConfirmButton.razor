@@ -1,0 +1,47 @@
+@* Two-step delete: the first click asks, the second acts. Deleting audio and transcripts is not
+   reversible, and a single button in a list row is far too easy to hit by accident. *@
+
+@if (_confirming)
+{
+    <span class="btn-group btn-group-sm" role="group">
+        <button class="btn @ConfirmClass" @onclick="Confirm" disabled="@Busy" title="@ConfirmTitle">
+            @ConfirmText
+        </button>
+        <button class="btn btn-outline-secondary" @onclick="() => _confirming = false" disabled="@Busy">
+            Cancel
+        </button>
+    </span>
+}
+else
+{
+    <button class="btn btn-sm @Class" @onclick="() => _confirming = true" disabled="@Busy" title="@Title">
+        @Text
+    </button>
+}
+
+@code {
+    [Parameter] public string Text { get; set; } = "Delete";
+
+    [Parameter] public string ConfirmText { get; set; } = "Really delete";
+
+    /// <summary>Spelled out on the confirm step, so it is clear what is about to go.</summary>
+    [Parameter] public string? ConfirmTitle { get; set; }
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public string Class { get; set; } = "btn-outline-danger";
+
+    [Parameter] public string ConfirmClass { get; set; } = "btn-danger";
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback OnConfirmed { get; set; }
+
+    private bool _confirming;
+
+    private async Task Confirm()
+    {
+        _confirming = false;
+        await OnConfirmed.InvokeAsync();
+    }
+}

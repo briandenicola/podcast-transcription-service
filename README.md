@@ -128,6 +128,21 @@ the page looks fine and the button does nothing. A plain multipart POST is faste
 and works with no JavaScript running at all. `Storage:MaxUploadMb` raises both the Kestrel and
 form-parser body limits to match.
 
+### Deleting things
+
+Three levels, because they mean different things. Deleting a **job** removes only its history
+row, leaving the transcript it produced. Deleting a **transcript** throws away one run — the
+episode and its audio stay, so it can be transcribed again. Deleting an **episode** removes the
+transcripts, the job history and the audio, and cannot be undone.
+
+Every delete asks once before acting, and anything with a job still running is refused with a
+note to cancel it first rather than deleting rows out from under the worker.
+
+Segments are always removed with an explicit statement rather than left to a foreign-key
+cascade: the search index is kept in step by a trigger on that table, and whether SQLite fires
+triggers for cascaded rows depends on a pragma. Relying on it would leave an index still
+returning hits for episodes that are gone.
+
 ### When whisper gets stuck
 
 Whisper sometimes latches onto a phrase and emits it over and over to the end of a chunk. It is a
