@@ -45,7 +45,24 @@ public class OllamaOptions
     public int ContextTokens { get; set; } = 8192;
 
     /// <summary><c>num_predict</c>: the ceiling on how long one answer may run.</summary>
-    public int MaxOutputTokens { get; set; } = 1200;
+    public int MaxOutputTokens { get; set; } = 2048;
+
+    /// <summary>
+    /// Whether a reasoning model may think before answering.
+    ///
+    /// Off, and sent explicitly, because Ollama turns it <em>on</em> by default for any model
+    /// that supports it — and a thinking model then spends <see cref="MaxOutputTokens"/> on
+    /// reasoning and returns an empty answer. qwen3, deepseek-r1 and gpt-oss all do this. The
+    /// failure is invisible from the outside: a 200 with nothing in it.
+    ///
+    /// Sending <c>false</c> is safe on models that cannot think — Ollama only rejects the field
+    /// when it is set to <c>true</c> on a model without the capability.
+    ///
+    /// Summarising does not want reasoning anyway: the work is reading and compressing, and the
+    /// thinking budget is better spent on the summary. Turn it on only alongside a much larger
+    /// <see cref="MaxOutputTokens"/>.
+    /// </summary>
+    public bool Think { get; set; }
 
     /// <summary>
     /// How much transcript goes into one pass, in characters. Roughly four characters to a token,

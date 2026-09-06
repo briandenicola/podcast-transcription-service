@@ -275,6 +275,22 @@ for the prompt and the answer, so the two move together.
 The summary card records which route was taken — "one pass" or "N passes" — because that is
 where any lost detail went.
 
+#### Reasoning models
+
+qwen3, deepseek-r1 and gpt-oss think before they answer, and Ollama switches that on by itself
+for any model that supports it. The model then spends the whole `num_predict` budget inside
+`<think>` and returns an empty answer — with an HTTP 200, so it looks exactly like a broken
+model. The symptom is `Ollama returned an empty completion.`
+
+`Ollama:Think` is sent explicitly and defaults to `false`, which is safe on every model: Ollama
+only rejects the field when it is set to `true` on a model that cannot think. Reasoning is no
+help here anyway — summarising is reading and compressing, and the budget is better spent on the
+summary. Any `<think>` block that arrives inline in an answer is stripped rather than summarised.
+
+If you do want reasoning, set `OLLAMA_THINK=true` **and** raise `OLLAMA_MAX_OUTPUT_TOKENS` well
+above what the model needs to think, or you will get the empty answer again. When that happens
+the error says so, and names both remedies, rather than reporting an empty completion.
+
 #### When it runs, and watching it
 
 By default, as the last step of every transcription job, with the job showing `Summarizing`
@@ -328,7 +344,8 @@ and `.env`.
 | `Ollama:AutoSummarize` | `true` | Summarise at the end of every job. False leaves it to the button on the episode page. |
 | `Ollama:ContextTokens` | `8192` | `num_ctx`. Ollama's own default is 2048, which silently truncates anything episode-sized. |
 | `Ollama:MaxWindowChars` | `12000` | How much transcript goes into one pass. Must fit inside `ContextTokens` with the prompt and answer allowed for. |
-| `Ollama:MaxOutputTokens` | `1200` | `num_predict`: ceiling on one answer. |
+| `Ollama:MaxOutputTokens` | `2048` | `num_predict`: ceiling on one answer. |
+| `Ollama:Think` | `false` | Whether a reasoning model may think first. Ollama turns this **on by itself**, and the model then spends the whole output budget reasoning and returns an empty answer. See below. |
 | `Ollama:Temperature` | `0.2` | Low on purpose. This is summarising, not writing. |
 | `Ollama:RequestTimeoutMinutes` | `30` | A long episode is several generate calls back to back, and a CPU-only model is slow. |
 | `Ollama:ExtraInstructions` | _(none)_ | Appended to the summary instructions. Where a show-specific steer goes. |
