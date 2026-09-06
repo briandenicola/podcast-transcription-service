@@ -295,6 +295,13 @@ main {
         margin-left: auto !important;
     }
 
+    .top-row .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
     .content {
         padding: 2px 20px calc(96px + env(safe-area-inset-bottom));
         background: #000;
