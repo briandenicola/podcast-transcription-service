@@ -7,6 +7,22 @@
         <div class="title-bar">
             <span class="title-bar-icon" aria-hidden="true">🎙</span>
             <span class="title-bar-text">Podcast Transcription</span>
+            <AuthorizeView Context="titleAuth">
+                <Authorized>
+                    <span class="pwa-title-user">
+                        <span class="pwa-title-username">@titleAuth.User.Identity?.Name</span>
+                        <AuthorizeView Policy="@Roles.AdminPolicy">
+                            <span class="pwa-admin-icon" role="img" aria-label="Administrator"
+                                  title="Administrator">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3l7 3v5c0 4.7-2.8 8.2-7 10-4.2-1.8-7-5.3-7-10V6l7-3z"></path>
+                                    <path d="M9 12l2 2 4-4"></path>
+                                </svg>
+                            </span>
+                        </AuthorizeView>
+                    </span>
+                </Authorized>
+            </AuthorizeView>
             @* Decorative only — there is no window manager behind them. *@
             <span class="title-bar-controls" aria-hidden="true">
                 <span>_</span><span>□</span><span>✕</span>
@@ -34,7 +50,7 @@
                             </form>
                         </Authorized>
                     </AuthorizeView>
-                    @* Settings is admin-only, and every action on it is too. *@
+                    @* Desktop-only; standalone navigation keeps Settings in the overflow menu. *@
                     <AuthorizeView Policy="@Roles.AdminPolicy">
                         <a href="/settings" class="btn btn-sm header-settings">Settings</a>
                     </AuthorizeView>

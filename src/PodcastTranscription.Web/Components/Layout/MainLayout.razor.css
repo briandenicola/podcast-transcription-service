@@ -40,6 +40,8 @@
 
 .title-bar-icon { font-size: var(--w95-h4); }
 
+.pwa-title-user { display: none; }
+
 /* Decorative: a real window's buttons, with no window manager behind them. */
 .title-bar-controls { display: flex; gap: 2px; }
 
@@ -215,18 +217,66 @@ main {
 
     .title-bar {
         min-height: 34px;
-        padding: 14px 20px 0;
+        padding: 14px 20px 3px;
         background: #000;
         color: #fff;
         font-family: "Segoe UI", Arial, sans-serif;
         font-size: 14px;
         font-weight: 600;
         letter-spacing: .08em;
+        line-height: 1;
         text-transform: uppercase;
     }
 
     .title-bar-icon,
     .title-bar-controls { display: none; }
+
+    .title-bar-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pwa-title-user {
+        display: flex;
+        min-width: 0;
+        max-width: 38%;
+        flex: 0 1 auto;
+        align-items: center;
+        gap: 6px;
+        color: #fff;
+        font-size: 17px;
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    .pwa-title-username {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pwa-admin-icon {
+        display: inline-grid;
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+        place-items: center;
+        color: #1ba1e2;
+    }
+
+    .pwa-admin-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+    }
 
     .window-body {
         display: block;
@@ -257,52 +307,8 @@ main {
     }
 
     .top-row {
-        min-height: 42px;
-        justify-content: flex-start;
-        gap: 8px;
-        padding: 4px 20px 8px;
-        overflow-x: auto;
-        background: #000;
-        box-shadow: none;
-        color: #a7a7a7;
-        font-family: "Segoe UI", Arial, sans-serif;
-        font-size: 12px;
+        display: none;
     }
-
-    .signed-in-user {
-        display: flex;
-        min-width: 0;
-        margin-right: 16px;
-        flex-direction: column;
-        line-height: 1.1;
-    }
-
-    .signed-in-name {
-        overflow: hidden;
-        color: #fff;
-        font-size: 19px;
-        font-weight: 400;
-        text-overflow: ellipsis;
-    }
-
-    .signed-in-role {
-        margin-top: 3px;
-        font-size: 11px;
-        text-transform: lowercase;
-    }
-
-    .top-row > form {
-        margin-left: auto !important;
-    }
-
-    .top-row .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-    }
-
-    .header-settings { display: none !important; }
 
     .content {
         width: 100%;

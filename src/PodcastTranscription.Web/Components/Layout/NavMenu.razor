@@ -97,6 +97,14 @@
                 <NavLink href="users">users</NavLink>
                 <NavLink href="settings">settings</NavLink>
             </AuthorizeView>
+            <AuthorizeView>
+                <Authorized>
+                    <form method="post" action="/logout">
+                        <AntiforgeryToken />
+                        <button type="submit" class="metro-menu-action">sign out</button>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
         </div>
     </details>
 </nav>

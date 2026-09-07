@@ -147,10 +147,18 @@ public class PwaAssetsTests
         var navigation = File.ReadAllText(Component("Layout", "NavMenu.razor"));
 
         Assert.Contains("class=\"btn btn-sm header-settings\"", layout);
-        Assert.Matches(@"\.header-settings\s*\{\s*display:\s*none\s*!important;", layoutTheme);
+        Assert.Contains("class=\"pwa-title-user\"", layout);
+        Assert.Contains("class=\"pwa-admin-icon\"", layout);
+        Assert.Matches(@"\.top-row\s*\{\s*display:\s*none;", layoutTheme);
+        Assert.Matches(@"\.pwa-title-user\s*\{[^}]*display:\s*flex;", layoutTheme);
         Assert.Matches(
             @"<NavLink href=""users"">users</NavLink>\s*<NavLink href=""settings"">settings</NavLink>",
             navigation);
+        Assert.Matches(
+            @"<NavLink href=""settings"">settings</NavLink>[\s\S]*?<form method=""post"" action=""/logout"">",
+            navigation);
+        Assert.Contains("<AntiforgeryToken />", navigation);
+        Assert.Contains("class=\"metro-menu-action\">sign out</button>", navigation);
     }
 
     private static string Component(params string[] parts) =>
