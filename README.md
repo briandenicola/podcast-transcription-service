@@ -203,7 +203,7 @@ Windows 95 interface unchanged.
 The installed library is a vertically scrolling card list rather than the desktop data table.
 Each card gives the episode identity, state, a three-line summary or transcript preview, actions
 and its added date without allowing horizontal page movement. Filters live in the funnel menu
-beside **Add episode**, keeping the library itself focused on the episodes.
+beside the heading, while **Add episode** remains in the application toolbar.
 
 The installed jobs page follows the same card pattern while prioritizing operational detail:
 state, percentage and chunk progress, requester, attempt, elapsed time, realtime factor, errors,

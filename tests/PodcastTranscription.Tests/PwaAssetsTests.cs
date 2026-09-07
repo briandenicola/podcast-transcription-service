@@ -70,8 +70,10 @@ public class PwaAssetsTests
         var theme = File.ReadAllText(WebRoot("wp7.css"));
 
         Assert.Contains("library-filter-popout", home);
+        Assert.Contains("library-add-episode", home);
         Assert.Contains("pwa-library-list", home);
         Assert.Contains("pwa-library-card", home);
+        Assert.Matches(@"\.library-add-episode\s*\{\s*display:\s*none;", theme);
         Assert.Contains(".library-table { display: none; }", theme);
         Assert.Contains("overflow-x: hidden", theme);
 
