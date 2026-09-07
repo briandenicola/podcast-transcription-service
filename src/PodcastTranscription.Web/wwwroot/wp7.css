@@ -997,6 +997,18 @@
         scroll-margin-top: 70px;
     }
 
+    .transcript-section-title {
+        display: block;
+        margin: 38px 0 20px;
+        padding-top: 22px;
+        border-top: 1px solid var(--metro-rule);
+        color: #fff;
+        font-size: 34px;
+        font-weight: 300;
+        line-height: 1.1;
+        text-transform: lowercase;
+    }
+
     .summary-titlebar {
         display: flex;
         align-items: center;

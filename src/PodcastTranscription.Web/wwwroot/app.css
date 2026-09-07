@@ -946,7 +946,8 @@ body.is-busy * { cursor: progress !important; }
 }
 
 /* Only the installed Metro presentation uses the summary/transcript Pivot links. */
-.reader-pivot { display: none; }
+.reader-pivot,
+.transcript-section-title { display: none; }
 
 .episode-title-row {
     display: flex;

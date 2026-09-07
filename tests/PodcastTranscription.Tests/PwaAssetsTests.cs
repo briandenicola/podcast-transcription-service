@@ -79,6 +79,8 @@ public class PwaAssetsTests
 
         Assert.Contains("/episodes/{EpisodeId}{ReaderQuery}#summary-card", episode);
         Assert.Contains("/episodes/{EpisodeId}{ReaderQuery}#transcript-body", episode);
+        Assert.Contains("<h2 class=\"transcript-section-title\">Transcription</h2>", episode);
+        Assert.Matches(@"\.transcript-section-title\s*\{[^}]*display:\s*block;", theme);
         Assert.DoesNotContain("href=\"#summary-card\"", episode);
         Assert.DoesNotContain("href=\"#transcript-body\"", episode);
     }
