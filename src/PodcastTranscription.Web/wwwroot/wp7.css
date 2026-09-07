@@ -23,6 +23,9 @@
     }
 
     body {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
         background: var(--metro-background);
         color: var(--metro-foreground);
         font-family: var(--metro-font);
@@ -344,6 +347,191 @@
     .table .added-column {
         width: 12rem;
         min-width: 12rem;
+        white-space: nowrap;
+    }
+
+    /* The library is a reading list on the phone, not a desktop table squeezed into a viewport. */
+    .library-heading {
+        position: relative;
+        align-items: flex-end !important;
+        gap: 14px;
+    }
+
+    .library-heading h1 { min-width: 0; }
+
+    .library-heading-actions {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .library-heading-actions > .btn {
+        min-height: 48px;
+        white-space: nowrap;
+    }
+
+    .desktop-library-filters,
+    .library-table { display: none; }
+
+    .library-filter-popout {
+        display: block;
+        position: static;
+    }
+
+    .library-filter-popout > summary {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        cursor: pointer;
+        list-style: none;
+        color: var(--metro-accent);
+    }
+
+    .library-filter-popout > summary::-webkit-details-marker { display: none; }
+
+    .library-filter-popout > summary svg {
+        width: 36px;
+        height: 36px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+    }
+
+    .library-filter-popout[open] > summary {
+        background: var(--metro-accent);
+        color: #fff;
+    }
+
+    .library-filter-panel {
+        position: absolute;
+        z-index: 30;
+        top: calc(100% + 10px);
+        right: 0;
+        left: 0;
+        padding: 18px;
+        border: 1px solid #555;
+        border-top: 4px solid var(--metro-accent);
+        background: #111;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, .75);
+    }
+
+    .library-filter-title {
+        margin-bottom: 15px;
+        color: #fff;
+        font-size: 25px;
+        font-weight: 300;
+        text-transform: lowercase;
+    }
+
+    .library-filter-form {
+        display: grid;
+        gap: 13px;
+    }
+
+    .library-filter-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 5px;
+    }
+
+    .library-filter-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pwa-library-list {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        border-top: 1px solid var(--metro-secondary);
+    }
+
+    .pwa-library-card {
+        width: 100%;
+        max-width: 100%;
+        padding: 16px 0 14px;
+        overflow: hidden;
+        border-bottom: 1px solid var(--metro-secondary);
+    }
+
+    .pwa-library-title {
+        display: block;
+        overflow: hidden;
+        color: #fff;
+        font-size: 22px;
+        font-weight: 400;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pwa-library-meta {
+        display: flex;
+        min-width: 0;
+        margin-top: 7px;
+        gap: 0;
+        overflow: hidden;
+        color: var(--metro-secondary);
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .pwa-library-meta span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pwa-library-meta span + span::before {
+        content: " · ";
+        color: var(--metro-muted);
+    }
+
+    .pwa-library-preview {
+        display: -webkit-box;
+        min-height: 4.5em;
+        margin: 18px 0;
+        overflow: hidden;
+        color: #ddd;
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+    }
+
+    .pwa-library-footer {
+        display: flex;
+        min-width: 0;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .pwa-library-actions {
+        display: grid;
+        min-width: 0;
+        flex: 1 1 18rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .pwa-library-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pwa-library-footer time {
+        flex: 0 0 auto;
+        padding-bottom: 10px;
+        color: var(--metro-secondary);
+        font-size: 12px;
         white-space: nowrap;
     }
 
@@ -799,5 +987,20 @@
 
     .export-links {
         width: 100%;
+    }
+}
+
+@media (display-mode: standalone) and (max-width: 380px) {
+    .library-heading {
+        flex-wrap: wrap;
+    }
+
+    .library-heading h1 {
+        flex: 1 0 100%;
+    }
+
+    .library-heading-actions {
+        width: 100%;
+        justify-content: flex-end;
     }
 }

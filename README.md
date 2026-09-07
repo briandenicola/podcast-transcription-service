@@ -200,6 +200,11 @@ Pivot-style tabs and a touch-sized application bar. The switch uses the browser'
 `display-mode: standalone` media query, so opening the site in a normal desktop browser keeps the
 Windows 95 interface unchanged.
 
+The installed library is a vertically scrolling card list rather than the desktop data table.
+Each card gives the episode identity, state, a three-line summary or transcript preview, actions
+and its added date without allowing horizontal page movement. Filters live in the funnel menu
+beside **Add episode**, keeping the library itself focused on the episodes.
+
 The web app manifest offers shortcuts for search, upload and jobs. A service worker caches only
 the public icon and offline shell; it deliberately does not cache authenticated pages, transcript
 data or media. The app depends on its Blazor Server connection, so an offline launch explains that

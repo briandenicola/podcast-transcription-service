@@ -303,7 +303,10 @@ main {
     }
 
     .content {
+        width: 100%;
+        max-width: 100%;
         padding: 2px 20px calc(96px + env(safe-area-inset-bottom));
+        overflow-x: hidden;
         background: #000;
         overscroll-behavior-y: contain;
     }

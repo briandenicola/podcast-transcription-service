@@ -9,12 +9,63 @@
 
 <PageTitle>Library</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="library-heading d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Library</h1>
-    <a class="btn btn-primary" href="/upload">Add episode</a>
+    <div class="library-heading-actions">
+        <a class="btn btn-primary" href="/upload">Add episode</a>
+        <details class="library-filter-popout">
+            <summary aria-label="Open library filters" title="Filter library">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"></path>
+                </svg>
+            </summary>
+            <div class="library-filter-panel">
+                <div class="library-filter-title">filter library</div>
+                <form method="get" action="/" class="library-filter-form">
+                    <div>
+                        <label class="form-label small mb-1" for="pwa-filter-title">Title</label>
+                        <input id="pwa-filter-title" class="form-control form-control-sm"
+                               placeholder="Filter by title" name="title" value="@_titleFilter" />
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1" for="pwa-filter-show">Show</label>
+                        <select id="pwa-filter-show" name="show" class="form-select form-select-sm">
+                            <option value="" selected="@(_showFilter.Length == 0)">All shows</option>
+                            @foreach (var show in _shows)
+                            {
+                                <option value="@show" selected="@(show == _showFilter)">@show</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1" for="pwa-filter-state">State</label>
+                        <select id="pwa-filter-state" name="state" class="form-select form-select-sm">
+                            @foreach (var (value, label) in States)
+                            {
+                                <option value="@value" selected="@(value == _stateFilter)">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1" for="pwa-sort-by">Sort</label>
+                        <select id="pwa-sort-by" name="sort" class="form-select form-select-sm">
+                            @foreach (var (value, label) in Sorts)
+                            {
+                                <option value="@value" selected="@(value == _sort)">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="library-filter-actions">
+                        <button type="submit" class="btn btn-sm">Apply filters</button>
+                        <a href="/" class="btn btn-sm">Clear</a>
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
 </div>
 
-<form method="get" action="/" class="row g-2 align-items-end mb-3" id="library-filters">
+<form method="get" action="/" class="desktop-library-filters row g-2 align-items-end mb-3" id="library-filters">
     <div class="col-md-4">
         <label class="form-label small mb-1" for="filter-title">Title</label>
         <input id="filter-title" class="form-control form-control-sm" placeholder="Filter by title"
@@ -73,7 +124,7 @@ else if (_episodes.Count == 0)
 }
 else
 {
-    <div class="table-wrap">
+    <div class="library-table table-wrap">
     <table class="table align-middle">
         <thead>
             <tr>
@@ -126,6 +177,31 @@ else
     </table>
     </div>
 
+    <div class="pwa-library-list">
+        @foreach (var row in _episodes)
+        {
+            <article class="pwa-library-card">
+                <a class="pwa-library-title" href="/episodes/@row.Episode.Id">@row.Episode.Title</a>
+                <div class="pwa-library-meta">
+                    <span>@(row.Episode.Show ?? "No show")</span>
+                    <span>@TimeFormat.Duration(row.Episode.DurationSec)</span>
+                    <span>@StateLabel(row)</span>
+                </div>
+                <p class="pwa-library-preview">@Preview(row)</p>
+                <div class="pwa-library-footer">
+                    <div class="pwa-library-actions">
+                        <a class="btn btn-sm" href="/episodes/@row.Episode.Id">Open</a>
+                        <a class="btn btn-sm" href="/delete/episode/@row.Episode.Id"
+                           title="Delete this episode, its transcripts and its audio">Delete</a>
+                    </div>
+                    <time datetime="@row.Episode.CreatedAt.ToString("O")">
+                        @row.Episode.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")
+                    </time>
+                </div>
+            </article>
+        }
+    </div>
+
     @if (_pageCount > 1)
     {
         <nav aria-label="Library pages">
@@ -151,7 +227,13 @@ else
 @code {
     private const int PageSize = 25;
 
-    private record Row(Episode Episode, int TranscriptCount, bool HasSummary, JobState? LatestJobState);
+    private record Row(
+        Episode Episode,
+        int TranscriptCount,
+        bool HasSummary,
+        JobState? LatestJobState,
+        string? SummaryText,
+        string? TranscriptText);
 
     /// <summary>A refusal handed back by the delete endpoint, e.g. a job still running.</summary>
     [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
@@ -287,8 +369,45 @@ else
                 e,
                 e.Transcripts.Count(),
                 e.Transcripts.Any(t => t.Summary != null),
-                e.Jobs.OrderByDescending(j => j.CreatedAt).Select(j => (JobState?)j.State).FirstOrDefault()))
+                e.Jobs.OrderByDescending(j => j.CreatedAt).Select(j => (JobState?)j.State).FirstOrDefault(),
+                e.Transcripts
+                    .Where(t => t.Summary != null)
+                    .OrderByDescending(t => t.Summary!.CreatedAt)
+                    .Select(t => t.Summary!.Content)
+                    .FirstOrDefault(),
+                e.Transcripts
+                    .OrderByDescending(t => t.CreatedAt)
+                    .SelectMany(t => t.Segments.OrderBy(s => s.Ordinal))
+                    .Select(s => s.Text)
+                    .FirstOrDefault()))
             .ToListAsync();
+    }
+
+    private static string StateLabel(Row row)
+    {
+        if (row.LatestJobState is { } state && JobDisplay.IsActive(state))
+        {
+            return state.ToString();
+        }
+
+        return row.HasSummary ? "Summary"
+            : row.TranscriptCount > 0 ? $"{row.TranscriptCount} transcript{(row.TranscriptCount == 1 ? "" : "s")}"
+            : row.LatestJobState == JobState.Failed ? "Failed"
+            : "No transcript";
+    }
+
+    private static string Preview(Row row)
+    {
+        var source = row.SummaryText ?? row.TranscriptText;
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return "No summary or transcript yet.";
+        }
+
+        return string.Join(" ", source
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.TrimStart('#', '-', '*', ' ')))
+            .Trim();
     }
 
     /// <summary>A window of page numbers around the current one, so 400 episodes is not 16 links.</summary>

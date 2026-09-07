@@ -964,3 +964,12 @@ body.is-busy * { cursor: progress !important; }
     display: flex;
     gap: var(--w95-gap-sm);
 }
+
+.library-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--w95-gap);
+}
+
+.library-filter-popout,
+.pwa-library-list { display: none; }

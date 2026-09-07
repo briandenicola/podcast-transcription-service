@@ -62,6 +62,25 @@ public class PwaAssetsTests
         Assert.Contains(".episode-player", theme);
     }
 
+    [Fact]
+    public void Pwa_library_uses_cards_and_reader_links_target_the_current_episode()
+    {
+        var home = File.ReadAllText(Component("Pages", "Home.razor"));
+        var episode = File.ReadAllText(Component("Pages", "EpisodeDetail.razor"));
+        var theme = File.ReadAllText(WebRoot("wp7.css"));
+
+        Assert.Contains("library-filter-popout", home);
+        Assert.Contains("pwa-library-list", home);
+        Assert.Contains("pwa-library-card", home);
+        Assert.Contains(".library-table { display: none; }", theme);
+        Assert.Contains("overflow-x: hidden", theme);
+
+        Assert.Contains("/episodes/{EpisodeId}{ReaderQuery}#summary-card", episode);
+        Assert.Contains("/episodes/{EpisodeId}{ReaderQuery}#transcript-body", episode);
+        Assert.DoesNotContain("href=\"#summary-card\"", episode);
+        Assert.DoesNotContain("href=\"#transcript-body\"", episode);
+    }
+
     private static string Component(params string[] parts) =>
         Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", "Components",
             Path.Combine(parts));

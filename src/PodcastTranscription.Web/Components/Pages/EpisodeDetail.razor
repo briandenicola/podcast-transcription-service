@@ -272,8 +272,8 @@ else
             </div>
 
             <nav class="reader-pivot" aria-label="Episode reader">
-                <a href="#summary-card">summary</a>
-                <a href="#transcript-body">transcript</a>
+                <a href="@($"/episodes/{EpisodeId}{ReaderQuery}#summary-card")">summary</a>
+                <a href="@($"/episodes/{EpisodeId}{ReaderQuery}#transcript-body")">transcript</a>
             </nav>
 
             <SummaryCard Summary="selected.Summary"
@@ -377,6 +377,10 @@ else
     private bool _comparing => Query("compare") == "1" && _transcripts.Count > 1;
 
     private bool _shading => Query("shade") == "1";
+
+    private string ReaderQuery => Selected is { } selected
+        ? $"?transcript={selected.Id}{(_editing ? "&edit=1" : "")}{(_shading ? "&shade=1" : "")}"
+        : string.Empty;
 
     /// <summary>
     /// Builds a link to this page with the view options it should carry. Everything the toolbar
