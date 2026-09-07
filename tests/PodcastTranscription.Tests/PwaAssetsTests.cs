@@ -95,8 +95,8 @@ public class PwaAssetsTests
         Assert.Contains("class=\"pwa-transcribe-cta\"", episode);
         Assert.Contains(".pwa-episode-menu,", desktopTheme);
         Assert.Contains(".episode-command-header { display: none; }", pwaTheme);
-        Assert.Contains(".reader-tools {\r\n        display: none !important;", pwaTheme);
-        Assert.Contains(".pwa-transcribe-cta {\r\n        display: grid;", pwaTheme);
+        Assert.Matches(@"\.reader-tools\s*\{\s*display:\s*none\s*!important;", pwaTheme);
+        Assert.Matches(@"\.pwa-transcribe-cta\s*\{\s*display:\s*grid;", pwaTheme);
     }
 
     [Fact]
