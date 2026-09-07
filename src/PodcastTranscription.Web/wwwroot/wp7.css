@@ -535,6 +535,150 @@
         white-space: nowrap;
     }
 
+    /* Jobs use the same reading-list rhythm while keeping operational data prominent. */
+    .jobs-heading {
+        position: relative;
+        align-items: flex-end !important;
+    }
+
+    .jobs-table { display: none; }
+
+    .pwa-job-list {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        border-top: 1px solid var(--metro-secondary);
+    }
+
+    .pwa-job-card {
+        width: 100%;
+        max-width: 100%;
+        padding: 18px 0 16px;
+        overflow: hidden;
+        border-bottom: 1px solid var(--metro-secondary);
+    }
+
+    .pwa-job-title {
+        display: block;
+        color: var(--metro-accent);
+        font-size: 22px;
+        font-weight: 400;
+        line-height: 1.25;
+    }
+
+    .pwa-job-show {
+        margin-top: 5px;
+        overflow: hidden;
+        color: var(--metro-secondary);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pwa-job-state {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 18px;
+        color: #fff;
+        font-size: 17px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pwa-job-progress {
+        height: 12px !important;
+        margin-top: 9px;
+    }
+
+    .pwa-job-chunks,
+    .pwa-job-retry-time {
+        margin-top: 7px;
+        color: var(--metro-secondary);
+        font-size: 13px;
+    }
+
+    .pwa-job-meta {
+        display: flex;
+        min-width: 0;
+        margin-top: 14px;
+        overflow: hidden;
+        color: #ddd;
+        font-size: 14px;
+        white-space: nowrap;
+    }
+
+    .pwa-job-meta + .pwa-job-meta { margin-top: 5px; }
+
+    .pwa-job-meta span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pwa-job-meta span + span::before {
+        content: " · ";
+        color: var(--metro-muted);
+    }
+
+    .pwa-job-error {
+        margin-top: 14px;
+        border-left: 4px solid var(--metro-danger);
+        background: #171717;
+    }
+
+    .pwa-job-error summary {
+        min-height: 44px;
+        padding: 11px 12px;
+        cursor: pointer;
+        color: #fff;
+    }
+
+    .pwa-job-error div {
+        max-height: 14rem;
+        padding: 0 12px 12px;
+        overflow: auto;
+        color: #ff8a8a;
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+    }
+
+    .pwa-job-footer {
+        display: flex;
+        min-width: 0;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 18px;
+    }
+
+    .pwa-job-actions {
+        display: flex;
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .pwa-job-actions form { display: contents; }
+
+    .pwa-job-actions .btn {
+        display: inline-flex;
+        min-width: 7rem;
+        flex: 1 1 7rem;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pwa-job-footer time {
+        flex: 0 0 auto;
+        padding-bottom: 10px;
+        color: var(--metro-secondary);
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
     /* The episode itself becomes a reader rather than a collection of panels. */
     .episode-heading {
         display: block !important;

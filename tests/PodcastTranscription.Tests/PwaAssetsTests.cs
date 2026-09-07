@@ -114,6 +114,27 @@ public class PwaAssetsTests
         Assert.Contains("Model = whisper.Model", queue);
     }
 
+    [Fact]
+    public void Pwa_jobs_use_filterable_operational_cards_instead_of_the_desktop_table()
+    {
+        var jobs = File.ReadAllText(Component("Pages", "Jobs.razor"));
+        var desktopTheme = File.ReadAllText(WebRoot("app.css"));
+        var pwaTheme = File.ReadAllText(WebRoot("wp7.css"));
+
+        Assert.Contains("<th>Requested by</th>", jobs);
+        Assert.Contains("jobs-filter-popout", jobs);
+        Assert.Contains("pwa-job-list", jobs);
+        Assert.Contains("pwa-job-card", jobs);
+        Assert.Contains("pwa-job-progress", jobs);
+        Assert.Contains("pwa-job-error", jobs);
+        Assert.Contains("name=\"state\"", jobs);
+        Assert.Contains("name=\"sort\"", jobs);
+        Assert.Contains("OnParametersSetAsync", jobs);
+        Assert.Contains(".pwa-job-list,", desktopTheme);
+        Assert.Matches(@"\.jobs-table\s*\{\s*display:\s*none;", pwaTheme);
+        Assert.Matches(@"\.pwa-job-list\s*\{\s*display:\s*block;", pwaTheme);
+    }
+
     private static string Component(params string[] parts) =>
         Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", "Components",
             Path.Combine(parts));

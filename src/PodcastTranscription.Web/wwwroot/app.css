@@ -990,6 +990,8 @@ body.is-busy * { cursor: progress !important; }
 
 .library-filter-popout,
 .pwa-library-list,
+.jobs-filter-popout,
+.pwa-job-list,
 .pwa-episode-menu,
 .pwa-transcribe-cta,
 .pwa-no-transcript { display: none; }

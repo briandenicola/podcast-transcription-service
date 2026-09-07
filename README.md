@@ -205,6 +205,11 @@ Each card gives the episode identity, state, a three-line summary or transcript 
 and its added date without allowing horizontal page movement. Filters live in the funnel menu
 beside **Add episode**, keeping the library itself focused on the episodes.
 
+The installed jobs page follows the same card pattern while prioritizing operational detail:
+state, percentage and chunk progress, requester, attempt, elapsed time, realtime factor, errors,
+and the actions valid for that job. Active jobs sort ahead of history, with state and date-order
+filters in the funnel menu. The desktop jobs table remains available in the Windows 95 interface.
+
 The web app manifest offers shortcuts for search, upload and jobs. A service worker caches only
 the public icon and offline shell; it deliberately does not cache authenticated pages, transcript
 data or media. The app depends on its Blazor Server connection, so an offline launch explains that
