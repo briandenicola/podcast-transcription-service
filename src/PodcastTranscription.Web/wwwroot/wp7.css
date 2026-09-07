@@ -542,11 +542,44 @@
     }
 
     .episode-title-row {
-        display: block;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .episode-title-row h1 {
+        min-width: 0;
+        margin-bottom: 0;
     }
 
     .episode-edit-button {
-        margin-top: 12px;
+        display: inline-grid;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        margin-top: -2px;
+        padding: 6px;
+        place-items: center;
+        border: 0;
+        background: transparent;
+        color: var(--metro-accent);
+    }
+
+    .episode-edit-button svg {
+        width: 34px;
+        height: 34px;
+        stroke-width: 1.8;
+    }
+
+    .episode-edit-button:hover,
+    .episode-edit-button:focus-visible,
+    .episode-edit-button:active:not(:disabled) {
+        padding: 6px;
+        border: 0;
+        background: transparent;
+        color: #65c5ef;
+        outline: 1px solid var(--metro-accent);
     }
 
     .episode-metadata-form {

@@ -954,6 +954,23 @@ body.is-busy * { cursor: progress !important; }
     gap: var(--w95-gap);
 }
 
+.episode-edit-button {
+    display: inline-grid;
+    min-width: 34px;
+    padding: 5px;
+    place-items: center;
+}
+
+.episode-edit-button svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+}
+
 .episode-metadata-form {
     display: grid;
     width: min(36rem, 70vw);

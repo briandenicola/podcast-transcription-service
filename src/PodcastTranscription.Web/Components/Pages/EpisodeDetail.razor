@@ -56,7 +56,13 @@ else
                     <h1 class="h3 mb-1">@_episode.Title</h1>
                     <AuthorizeView Policy="@Roles.MemberPolicy">
                         <a class="btn btn-sm episode-edit-button"
-                           href="/episodes/@EpisodeId?metadata=edit">Edit details</a>
+                           href="/episodes/@EpisodeId?metadata=edit"
+                           aria-label="Edit episode title and show"
+                           title="Edit episode title and show">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M14.7 5.3l4 4M4 20l4.8-1 10.9-10.9a1.4 1.4 0 0 0 0-2l-1.8-1.8a1.4 1.4 0 0 0-2 0L5 15.2 4 20z"></path>
+                            </svg>
+                        </a>
                     </AuthorizeView>
                 </div>
                 <div class="text-muted small">
