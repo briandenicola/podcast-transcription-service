@@ -81,6 +81,39 @@ public class PwaAssetsTests
         Assert.DoesNotContain("href=\"#transcript-body\"", episode);
     }
 
+    [Fact]
+    public void Pwa_episode_actions_use_a_title_menu_and_a_large_empty_state_transcribe_action()
+    {
+        var episode = File.ReadAllText(Component("Pages", "EpisodeDetail.razor"));
+        var desktopTheme = File.ReadAllText(WebRoot("app.css"));
+        var pwaTheme = File.ReadAllText(WebRoot("wp7.css"));
+
+        Assert.Contains("<details class=\"pwa-episode-menu\">", episode);
+        Assert.Contains("aria-label=\"Open episode actions\"", episode);
+        Assert.Contains("class=\"pwa-menu-transcribe\"", episode);
+        Assert.Contains("class=\"pwa-menu-action-row\"", episode);
+        Assert.Contains("class=\"pwa-transcribe-cta\"", episode);
+        Assert.Contains(".pwa-episode-menu,", desktopTheme);
+        Assert.Contains(".episode-command-header { display: none; }", pwaTheme);
+        Assert.Contains(".reader-tools {\r\n        display: none !important;", pwaTheme);
+        Assert.Contains(".pwa-transcribe-cta {\r\n        display: grid;", pwaTheme);
+    }
+
+    [Fact]
+    public void Transcription_forms_cannot_override_the_configured_whisper_model()
+    {
+        var episode = File.ReadAllText(Component("Pages", "EpisodeDetail.razor"));
+        var feed = File.ReadAllText(Component("Pages", "FeedDetail.razor"));
+        var actions = File.ReadAllText(Source("Endpoints", "ActionEndpoints.cs"));
+        var queue = File.ReadAllText(Source("Services", "JobQueue.cs"));
+
+        Assert.DoesNotContain("name=\"model\"", episode);
+        Assert.DoesNotContain("name=\"model\"", feed);
+        Assert.DoesNotContain("form[\"model\"]", actions);
+        Assert.DoesNotContain("DefaultModel", queue);
+        Assert.Contains("Model = whisper.Model", queue);
+    }
+
     private static string Component(params string[] parts) =>
         Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", "Components",
             Path.Combine(parts));
@@ -88,6 +121,9 @@ public class PwaAssetsTests
     private static string WebRoot(params string[] parts) =>
         Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", "wwwroot",
             Path.Combine(parts));
+
+    private static string Source(params string[] parts) =>
+        Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", Path.Combine(parts));
 
     private static string RepositoryRoot()
     {

@@ -163,14 +163,10 @@ public static class ActionEndpoints
         }).RequireAuthorization(Roles.MemberPolicy);
 
         app.MapPost("/episodes/{id:int}/transcribe", async (
-            int id, HttpRequest request, ClaimsPrincipal user, JobQueue queue, CancellationToken ct) =>
+            int id, ClaimsPrincipal user, JobQueue queue, CancellationToken ct) =>
         {
-            var form = await request.ReadFormAsync(ct);
-            var model = form["model"].ToString();
-
             await queue.EnqueueAsync(
                 id,
-                model: string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
                 queuedBy: SignedInName(user),
                 ct: ct);
 
@@ -354,7 +350,6 @@ public static class ActionEndpoints
             }
 
             feed.AutoTranscribe = form["autoTranscribe"].ToString() is "on" or "true";
-            feed.DefaultModel = Blank(form["model"]);
             feed.DefaultLanguage = Blank(form["language"]);
             feed.DefaultPrompt = Blank(form["prompt"]);
 

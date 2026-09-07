@@ -21,12 +21,11 @@ public class JobQueue(
     private readonly TranscriptionOptions _options = options.Value;
 
     /// <summary>
-    /// Queues an episode for transcription. Settings not given explicitly are inherited from the
-    /// episode's feed — podcasts are consistent, so a show is configured once and its episodes
-    /// follow — and fall back to the global configuration after that.
+    /// Queues an episode for transcription. Language and prompt settings not given explicitly are
+    /// inherited from the episode's feed. The model always comes from the system configuration.
     /// </summary>
     public async Task<Job> EnqueueAsync(
-        int episodeId, string? language = null, string? prompt = null, string? model = null,
+        int episodeId, string? language = null, string? prompt = null,
         string? queuedBy = null, CancellationToken ct = default)
     {
         var feed = await db.Episodes
@@ -38,7 +37,7 @@ public class JobQueue(
         {
             EpisodeId = episodeId,
             State = JobState.Queued,
-            Model = model ?? feed?.DefaultModel ?? whisper.Model,
+            Model = whisper.Model,
             Language = language ?? feed?.DefaultLanguage,
             Prompt = prompt ?? feed?.DefaultPrompt,
 

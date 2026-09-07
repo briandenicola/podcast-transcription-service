@@ -149,7 +149,7 @@ public class FeedServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task New_episodes_inherit_the_feeds_per_show_defaults()
+    public async Task New_episodes_use_the_system_model_and_inherit_other_per_show_defaults()
     {
         await using var db = new AppDbContext(_dbOptions);
 
@@ -167,7 +167,7 @@ public class FeedServiceTests : IDisposable
         await service.PollAsync(feed.Id);
 
         var job = await db.Jobs.SingleAsync();
-        Assert.Equal("large-v3", job.Model);
+        Assert.Equal("large-v3-turbo-q5_0", job.Model);
         Assert.Equal("en", job.Language);
         Assert.Equal("Kara Swisher, Scott Galloway, EBITDA", job.Prompt);
     }

@@ -99,8 +99,8 @@ immediately. Word timings are dropped on edit, since they no longer describe the
 Members can also edit an episode's title and show from its detail page. The update is an ordinary
 form post, so it works without the Blazor websocket just like transcript corrections.
 
-Re-transcribing records the model against each transcript, so the back catalogue can be
-reprocessed when a better model ships. **Compare** puts two runs side by side.
+Transcription always uses the model configured for whisper-server and records it against each
+transcript, so the back catalogue can be reprocessed after the configured model changes.
 
 ### Retention and backups
 

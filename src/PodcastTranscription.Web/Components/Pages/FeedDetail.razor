@@ -12,7 +12,6 @@
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject FeedService Feeds
 @inject IOptions<IngestOptions> IngestSettings
-@inject WhisperClient Whisper
 
 <PageTitle>@(_feed?.Title ?? "Feed")</PageTitle>
 
@@ -61,13 +60,6 @@ else
                             <label class="form-check-label" for="auto-transcribe">
                                 Transcribe new episodes automatically
                             </label>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label" for="default-model">Model</label>
-                            <input id="default-model" name="model" class="form-control"
-                                   value="@_feed.DefaultModel" placeholder="@Whisper.Model" />
-                            <div class="form-text">Must match what whisper-server was started with.</div>
                         </div>
 
                         <div class="mb-3">

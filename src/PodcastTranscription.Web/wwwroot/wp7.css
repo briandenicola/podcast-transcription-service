@@ -542,12 +542,14 @@
     }
 
     .episode-title-row {
+        position: relative;
         display: flex;
         align-items: flex-start;
         gap: 8px;
     }
 
     .episode-title-row h1 {
+        flex: 1 1 auto;
         min-width: 0;
         margin-bottom: 0;
     }
@@ -581,6 +583,116 @@
         color: #65c5ef;
         outline: 1px solid var(--metro-accent);
     }
+
+    .pwa-episode-menu {
+        display: block;
+        flex: 0 0 44px;
+    }
+
+    .pwa-episode-menu > summary {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        cursor: pointer;
+        list-style: none;
+        color: var(--metro-accent);
+    }
+
+    .pwa-episode-menu > summary::-webkit-details-marker { display: none; }
+
+    .pwa-episode-menu > summary svg {
+        width: 34px;
+        height: 34px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-width: 1.8;
+    }
+
+    .pwa-episode-menu[open] > summary {
+        background: var(--metro-accent);
+        color: #fff;
+    }
+
+    .pwa-episode-menu-panel {
+        position: absolute;
+        z-index: 40;
+        top: calc(100% + 10px);
+        right: 0;
+        left: 0;
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid #555;
+        border-top: 4px solid var(--metro-accent);
+        background: #111;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, .8);
+    }
+
+    .pwa-episode-menu-title {
+        color: #fff;
+        font-size: 25px;
+        font-weight: 300;
+        text-transform: lowercase;
+    }
+
+    .pwa-episode-menu-meta {
+        color: var(--metro-secondary);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .pwa-menu-transcribe {
+        display: grid;
+    }
+
+    .pwa-menu-transcribe .btn {
+        width: 100%;
+    }
+
+    .pwa-menu-action-row {
+        display: grid;
+        grid-template-columns: 62px minmax(0, 1fr);
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .pwa-menu-action-row > span {
+        display: flex;
+        align-items: center;
+        color: var(--metro-secondary);
+        font-size: 13px;
+        text-transform: lowercase;
+    }
+
+    .pwa-menu-action-row > div {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+    }
+
+    .pwa-menu-action-row .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        margin: 0;
+        text-align: center;
+    }
+
+    .pwa-menu-action-row > .pwa-menu-export {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    .pwa-menu-export .btn {
+        padding-right: 3px;
+        padding-left: 3px;
+        font-size: 11px;
+    }
+
+    .episode-command-header { display: none; }
 
     .episode-metadata-form {
         width: 100%;
@@ -629,10 +741,7 @@
     }
 
     .reader-tools {
-        display: block !important;
-        padding: 18px 0;
-        border-top: 1px solid var(--metro-rule);
-        border-bottom: 1px solid var(--metro-rule);
+        display: none !important;
     }
 
     .reader-tools > .text-muted {
@@ -713,6 +822,23 @@
 
     .toolbar-hint {
         display: none;
+    }
+
+    .desktop-no-transcript { display: none; }
+
+    .pwa-no-transcript { display: block; }
+
+    .pwa-transcribe-cta {
+        display: grid;
+        min-height: 32vh;
+        place-items: center;
+    }
+
+    .pwa-transcribe-cta .btn {
+        min-width: min(16rem, 80vw);
+        min-height: 72px;
+        font-size: 25px;
+        font-weight: 600;
     }
 
     /* Summary uses a comfortable measure and editorial rhythm for long-form reading. */

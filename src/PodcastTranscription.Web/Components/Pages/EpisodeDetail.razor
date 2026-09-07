@@ -12,7 +12,6 @@
 @inject JobQueue Queue
 @inject JobNotifier Notifier
 @inject DeletionService Deletion
-@inject WhisperClient Whisper
 @inject SummaryService Summaries
 @inject SummaryRunner Runner
 @inject NavigationManager Navigation
@@ -64,6 +63,106 @@ else
                             </svg>
                         </a>
                     </AuthorizeView>
+
+                    <details class="pwa-episode-menu">
+                        <summary aria-label="Open episode actions" title="Episode actions">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 7h16M4 12h16M4 17h16"></path>
+                            </svg>
+                        </summary>
+                        <div class="pwa-episode-menu-panel">
+                            <div class="pwa-episode-menu-title">episode actions</div>
+
+                            @if (Selected is { } menuTranscript)
+                            {
+                                <div class="pwa-episode-menu-meta">
+                                    @menuTranscript.Segments.Count segments
+                                    · @menuTranscript.Model
+                                    · @(menuTranscript.Language ?? "unknown language")
+                                    @if (menuTranscript.RealtimeFactor is { } menuFactor)
+                                    {
+                                        <span> · @menuFactor.ToString("N1")× realtime</span>
+                                    }
+                                </div>
+
+                                @if (_activeJob is null)
+                                {
+                                    <AuthorizeView Policy="@Roles.MemberPolicy">
+                                        <form method="post" action="/episodes/@EpisodeId/transcribe"
+                                              class="pwa-menu-transcribe">
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="btn btn-primary btn-sm">Re-transcribe</button>
+                                        </form>
+                                    </AuthorizeView>
+                                }
+                                else
+                                {
+                                    <AuthorizeView Policy="@Roles.MemberPolicy">
+                                        <form method="post" action="/episodes/@EpisodeId/jobs/@_activeJob.Id/cancel">
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="btn btn-sm w-100">Cancel active job</button>
+                                        </form>
+                                    </AuthorizeView>
+                                }
+
+                                <div class="pwa-menu-action-row">
+                                    <span>display</span>
+                                    <div>
+                                        <AuthorizeView Policy="@Roles.MemberPolicy">
+                                            <a class="btn btn-sm"
+                                               href="@ViewLink(menuTranscript.Id, edit: !_editing)">
+                                                @(_editing ? "Done correcting" : "Correct text")
+                                            </a>
+                                        </AuthorizeView>
+                                        <a class="btn btn-sm"
+                                           href="@ViewLink(menuTranscript.Id, shade: !_shading)">
+                                            @(_shading ? "Hide shading" : "Low confidence")
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <AuthorizeView Policy="@Roles.AdminPolicy">
+                                    <div class="pwa-menu-action-row">
+                                        <span>delete</span>
+                                        <div>
+                                            <a class="btn btn-sm" href="/delete/episode/@EpisodeId">Episode</a>
+                                            <a class="btn btn-sm"
+                                               href="/delete/transcript/@menuTranscript.Id?episodeId=@EpisodeId">
+                                                Transcript
+                                            </a>
+                                        </div>
+                                    </div>
+                                </AuthorizeView>
+
+                                <div class="pwa-menu-action-row">
+                                    <span>export</span>
+                                    <div class="pwa-menu-export">
+                                        @foreach (var (format, label, extension) in ExportFormats)
+                                        {
+                                            <a class="btn btn-sm"
+                                               href="/episodes/@EpisodeId/transcripts/@menuTranscript.Id/export/@format"
+                                               title="@label">@extension</a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                @if (_activeJob is not null)
+                                {
+                                    <AuthorizeView Policy="@Roles.MemberPolicy">
+                                        <form method="post" action="/episodes/@EpisodeId/jobs/@_activeJob.Id/cancel">
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="btn btn-sm w-100">Cancel active job</button>
+                                        </form>
+                                    </AuthorizeView>
+                                }
+                                <AuthorizeView Policy="@Roles.AdminPolicy">
+                                    <a class="btn btn-sm w-100" href="/delete/episode/@EpisodeId">Delete episode</a>
+                                </AuthorizeView>
+                            }
+                        </div>
+                    </details>
                 </div>
                 <div class="text-muted small">
                     @(_episode.Show ?? "No show")
@@ -72,7 +171,7 @@ else
                 </div>
             }
         </div>
-        <div class="text-end">
+        <div class="episode-command-header text-end">
             @if (_activeJob is null)
             {
                 <AuthorizeView Policy="@Roles.AdminPolicy">
@@ -82,12 +181,8 @@ else
                     </div>
                 </AuthorizeView>
                 <AuthorizeView Policy="@Roles.MemberPolicy">
-                <form method="post" action="/episodes/@EpisodeId/transcribe" class="input-group">
+                <form method="post" action="/episodes/@EpisodeId/transcribe">
                     <AntiforgeryToken />
-                    @* Recorded against the transcript, so the back catalogue can be reprocessed
-                       on a better model and the results compared. *@
-                    <input name="model" class="form-control form-control-sm" style="max-width: 14rem;"
-                           placeholder="@Whisper.Model" aria-label="Model" />
                     <button type="submit" class="btn btn-primary btn-sm">
                         @(_transcripts.Count == 0 ? "Transcribe" : "Re-transcribe")
                     </button>
@@ -171,7 +266,21 @@ else
 
     @if (_transcripts.Count == 0)
     {
-        <p class="text-muted">No transcript yet.</p>
+        <p class="desktop-no-transcript text-muted">No transcript yet.</p>
+        @if (_activeJob is null)
+        {
+            <AuthorizeView Policy="@Roles.MemberPolicy">
+                <Authorized>
+                    <form method="post" action="/episodes/@EpisodeId/transcribe" class="pwa-transcribe-cta">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-primary">Transcribe</button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <p class="pwa-no-transcript text-muted">No transcript yet.</p>
+                </NotAuthorized>
+            </AuthorizeView>
+        }
     }
     else
     {
