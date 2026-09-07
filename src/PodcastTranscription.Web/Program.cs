@@ -97,6 +97,7 @@ builder.Services.AddScoped<EpisodeImporter>();
 builder.Services.AddScoped<TranscriptionPipeline>();
 builder.Services.AddScoped<JobQueue>();
 builder.Services.AddScoped<DeletionService>();
+builder.Services.AddScoped<EpisodeMetadataService>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<YtDlpClient>();
 builder.Services.AddScoped<FeedService>();

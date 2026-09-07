@@ -403,6 +403,44 @@ public class TranscriptionPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task A_title_edited_during_download_is_not_replaced_by_downloaded_metadata()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var episode = new Episode
+        {
+            Title = Episode.PendingTitle,
+            SourceUrl = "https://example.com/audio/edited.mp3"
+        };
+        db.Episodes.Add(episode);
+        await db.SaveChangesAsync();
+
+        var job = new Job { EpisodeId = episode.Id, State = JobState.Queued, Model = "large-v3-turbo-q5_0" };
+        db.Jobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var downloader = new FakeYtDlpClient(title: "Downloaded title", durationSec: 300)
+        {
+            BeforeComplete = async () =>
+            {
+                await using var editorDb = new AppDbContext(_dbOptions);
+                var metadata = new EpisodeMetadataService(
+                    editorDb, NullLogger<EpisodeMetadataService>.Instance);
+                await metadata.UpdateAsync(episode.Id, "My corrected title", "My show");
+            }
+        };
+        var handler = new SequencedHttpMessageHandler(
+            (HttpStatusCode.OK, SentenceResponse("Hello", 0, 30)));
+
+        await CreatePipeline(db, handler, new FakeAudioProcessor(300), Settings(), downloader)
+            .RunAsync(job.Id, CancellationToken.None);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        var stored = await verify.Episodes.SingleAsync();
+        Assert.Equal("My corrected title", stored.Title);
+        Assert.Equal("My show", stored.Show);
+    }
+
+    [Fact]
     public async Task A_download_matching_audio_already_in_the_library_fails_without_retrying()
     {
         await using var db = new AppDbContext(_dbOptions);

@@ -947,3 +947,20 @@ body.is-busy * { cursor: progress !important; }
 
 /* Only the installed Metro presentation uses the summary/transcript Pivot links. */
 .reader-pivot { display: none; }
+
+.episode-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--w95-gap);
+}
+
+.episode-metadata-form {
+    display: grid;
+    width: min(36rem, 70vw);
+    gap: var(--w95-gap);
+}
+
+.episode-metadata-actions {
+    display: flex;
+    gap: var(--w95-gap-sm);
+}

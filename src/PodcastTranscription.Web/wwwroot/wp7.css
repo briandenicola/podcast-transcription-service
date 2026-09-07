@@ -353,6 +353,32 @@
         margin-bottom: 18px !important;
     }
 
+    .episode-title-row {
+        display: block;
+    }
+
+    .episode-edit-button {
+        margin-top: 12px;
+    }
+
+    .episode-metadata-form {
+        width: 100%;
+        max-width: 38rem;
+        gap: 16px;
+    }
+
+    .episode-metadata-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .episode-metadata-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
     .episode-heading > .text-end {
         margin-top: 18px;
         text-align: left !important;

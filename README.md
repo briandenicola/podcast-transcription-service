@@ -96,6 +96,9 @@ Whisper mangles proper nouns. The **Edit** toggle turns each line into a text bo
 segment is flagged and the FTS index follows it inside SQLite, so search reflects the fix
 immediately. Word timings are dropped on edit, since they no longer describe the text.
 
+Members can also edit an episode's title and show from its detail page. The update is an ordinary
+form post, so it works without the Blazor websocket just like transcript corrections.
+
 Re-transcribing records the model against each transcript, so the back catalogue can be
 reprocessed when a better model ships. **Compare** puts two runs side by side.
 

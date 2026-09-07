@@ -11,8 +11,9 @@ public class FakeYtDlpClient(byte[]? content = null, string? title = null, doubl
         NullLogger<YtDlpClient>.Instance)
 {
     public List<string> RequestedUrls { get; } = [];
+    public Func<Task>? BeforeComplete { get; init; }
 
-    public override Task<DownloadResult> DownloadAudioAsync(
+    public override async Task<DownloadResult> DownloadAudioAsync(
         string url, string destinationDirectory, CancellationToken ct = default)
     {
         RequestedUrls.Add(url);
@@ -21,6 +22,11 @@ public class FakeYtDlpClient(byte[]? content = null, string? title = null, doubl
         var path = Path.Combine(destinationDirectory, "downloaded.mp3");
         File.WriteAllBytes(path, content ?? [1, 2, 3, 4]);
 
-        return Task.FromResult(new DownloadResult(path, title, null, durationSec));
+        if (BeforeComplete is not null)
+        {
+            await BeforeComplete();
+        }
+
+        return new DownloadResult(path, title, null, durationSec);
     }
 }

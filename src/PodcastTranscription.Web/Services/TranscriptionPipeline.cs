@@ -241,6 +241,10 @@ public class TranscriptionPipeline(
                 $"Byte-identical to episode {duplicate.Id} ('{duplicate.Title}'), which is already in the library.");
         }
 
+        // The download can take minutes. A member may edit the placeholder title while it is
+        // running, so refresh before deciding whether downloaded metadata may replace it.
+        await db.Entry(episode).ReloadAsync(ct);
+
         episode.AudioPath = relative;
         episode.AudioSha256 = sha;
         episode.DurationSec ??= download.DurationSec;

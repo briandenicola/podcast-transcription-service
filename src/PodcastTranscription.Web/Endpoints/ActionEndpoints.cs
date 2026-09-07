@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Services;
@@ -139,6 +140,28 @@ public static class ActionEndpoints
 
     private static void MapEpisodes(WebApplication app)
     {
+        app.MapPost("/episodes/{id:int}/metadata", async (
+            int id, HttpRequest request, IAntiforgery antiforgery,
+            EpisodeMetadataService metadata, CancellationToken ct) =>
+        {
+            await antiforgery.ValidateRequestAsync(request.HttpContext);
+            var form = await request.ReadFormAsync(ct);
+            var result = await metadata.UpdateAsync(
+                id,
+                form["title"].ToString(),
+                form["show"].ToString(),
+                ct);
+
+            if (result.NotFound)
+            {
+                return Results.NotFound();
+            }
+
+            return result.Updated
+                ? Back($"/episodes/{id}", "Episode details saved.")
+                : Back($"/episodes/{id}?metadata=edit", result.Error, failed: true);
+        }).RequireAuthorization(Roles.MemberPolicy);
+
         app.MapPost("/episodes/{id:int}/transcribe", async (
             int id, HttpRequest request, ClaimsPrincipal user, JobQueue queue, CancellationToken ct) =>
         {
