@@ -341,6 +341,12 @@
 
     .table > tbody > tr:hover > td { background: #111; }
 
+    .table .added-column {
+        width: 12rem;
+        min-width: 12rem;
+        white-space: nowrap;
+    }
+
     /* The episode itself becomes a reader rather than a collection of panels. */
     .episode-heading {
         display: block !important;

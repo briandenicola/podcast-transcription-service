@@ -80,7 +80,7 @@ else
                 <th>Title</th>
                 <th>Show</th>
                 <th class="text-end">Duration</th>
-                <th>Added</th>
+                <th class="added-column">Added</th>
                 <th>State</th>
                 <th></th>
             </tr>
@@ -92,19 +92,11 @@ else
                     <td><a href="/episodes/@row.Episode.Id" class="text-decoration-none">@row.Episode.Title</a></td>
                     <td class="text-muted">@(row.Episode.Show ?? "—")</td>
                     <td class="text-end font-monospace">@TimeFormat.Duration(row.Episode.DurationSec)</td>
-                    <td class="text-muted">@row.Episode.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="added-column text-muted">@row.Episode.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                     <td>
-                        @if (row.LatestJobState is { } state && JobDisplay.IsActive(state))
+                        @if (DisplayState(row) is { } state)
                         {
-                            <span class="badge @JobDisplay.BadgeClass(state)">@state</span>
-                        }
-                        else if (row.TranscriptCount > 0)
-                        {
-                            <span class="badge bg-success">@row.TranscriptCount transcript@(row.TranscriptCount == 1 ? "" : "s")</span>
-                        }
-                        else if (row.LatestJobState == JobState.Failed)
-                        {
-                            <span class="badge bg-danger">Failed</span>
+                            <span class="badge @state.BadgeClass">@state.Label</span>
                         }
                         else
                         {
@@ -147,7 +139,9 @@ else
 @code {
     private const int PageSize = 25;
 
-    private record Row(Episode Episode, int TranscriptCount, JobState? LatestJobState);
+    private record Row(Episode Episode, int TranscriptCount, bool HasSummary, JobState? LatestJobState);
+
+    private record DisplayedState(string Label, string BadgeClass);
 
     /// <summary>A refusal handed back by the delete endpoint, e.g. a job still running.</summary>
     [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
@@ -155,9 +149,11 @@ else
     private static readonly (string Value, string Label)[] States =
     [
         ("", "Any"),
-        ("transcribed", "Transcribed"),
+        ("downloading", "Downloading"),
+        ("transcribing", "Transcribing"),
+        ("transcript", "Transcript"),
+        ("summary", "Summary"),
         ("none", "No transcript"),
-        ("running", "In progress"),
         ("failed", "Failed")
     ];
 
@@ -251,11 +247,14 @@ else
         // filters as a subquery rather than a column.
         query = _stateFilter switch
         {
-            "transcribed" => query.Where(e => e.Transcripts.Any()),
+            "downloading" => query.Where(e => e.Jobs.Any(j =>
+                j.State == JobState.Queued || j.State == JobState.Downloading)),
+            "transcribing" => query.Where(e => e.Jobs.Any(j =>
+                j.State == JobState.Preparing || j.State == JobState.Transcribing)),
+            "transcript" => query.Where(e =>
+                e.Transcripts.Any() && !e.Transcripts.Any(t => t.Summary != null)),
+            "summary" => query.Where(e => e.Transcripts.Any(t => t.Summary != null)),
             "none" => query.Where(e => !e.Transcripts.Any()),
-            "running" => query.Where(e => e.Jobs.Any(j =>
-                j.State == JobState.Queued || j.State == JobState.Downloading
-                || j.State == JobState.Preparing || j.State == JobState.Transcribing)),
             "failed" => query.Where(e => e.Jobs.Any(j => j.State == JobState.Failed)),
             _ => query
         };
@@ -278,9 +277,26 @@ else
             .Select(e => new Row(
                 e,
                 e.Transcripts.Count(),
+                e.Transcripts.Any(t => t.Summary != null),
                 e.Jobs.OrderByDescending(j => j.CreatedAt).Select(j => (JobState?)j.State).FirstOrDefault()))
             .ToListAsync();
     }
+
+    /// <summary>
+    /// The library reports the four useful stages rather than exposing queue and audio-preparation
+    /// implementation details. Active work wins over completed artifacts from an older run.
+    /// </summary>
+    private static DisplayedState? DisplayState(Row row) => row.LatestJobState switch
+    {
+        JobState.Queued or JobState.Downloading =>
+            new DisplayedState("downloading", "bg-info text-dark"),
+        JobState.Preparing or JobState.Transcribing =>
+            new DisplayedState("transcribing", "bg-primary"),
+        _ when row.HasSummary => new DisplayedState("summary", "bg-success"),
+        _ when row.TranscriptCount > 0 => new DisplayedState("transcript", "bg-success"),
+        JobState.Failed => new DisplayedState("failed", "bg-danger"),
+        _ => null
+    };
 
     /// <summary>A window of page numbers around the current one, so 400 episodes is not 16 links.</summary>
     private IEnumerable<int> PageNumbers()
