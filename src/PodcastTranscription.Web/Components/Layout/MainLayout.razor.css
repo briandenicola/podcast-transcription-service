@@ -302,6 +302,8 @@ main {
         box-sizing: border-box;
     }
 
+    .header-settings { display: none !important; }
+
     .content {
         width: 100%;
         max-width: 100%;

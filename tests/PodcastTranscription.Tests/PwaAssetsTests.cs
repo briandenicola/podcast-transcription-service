@@ -139,6 +139,20 @@ public class PwaAssetsTests
         Assert.Matches(@"\.pwa-job-list\s*\{\s*display:\s*block;", pwaTheme);
     }
 
+    [Fact]
+    public void Pwa_settings_lives_in_the_admin_overflow_instead_of_the_title_bar()
+    {
+        var layout = File.ReadAllText(Component("Layout", "MainLayout.razor"));
+        var layoutTheme = File.ReadAllText(Component("Layout", "MainLayout.razor.css"));
+        var navigation = File.ReadAllText(Component("Layout", "NavMenu.razor"));
+
+        Assert.Contains("class=\"btn btn-sm header-settings\"", layout);
+        Assert.Matches(@"\.header-settings\s*\{\s*display:\s*none\s*!important;", layoutTheme);
+        Assert.Matches(
+            @"<NavLink href=""users"">users</NavLink>\s*<NavLink href=""settings"">settings</NavLink>",
+            navigation);
+    }
+
     private static string Component(params string[] parts) =>
         Path.Combine(RepositoryRoot(), "src", "PodcastTranscription.Web", "Components",
             Path.Combine(parts));
