@@ -57,6 +57,8 @@ public class SummaryRunnerTests : IDisposable
         services.AddScoped<TranscriptSummarizer>();
         services.AddScoped<SummaryService>();
         services.AddSingleton<SummaryRunner>();
+        services.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(() => "{}"));
+        services.AddScoped<PodcastTranscription.Web.Services.PushoverNotifier>();
 
         return services.BuildServiceProvider();
     }

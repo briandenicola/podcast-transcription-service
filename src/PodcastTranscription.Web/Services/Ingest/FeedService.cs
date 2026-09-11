@@ -28,7 +28,8 @@ public class FeedService(
 {
     private readonly IngestOptions _options = options.Value;
 
-    public async Task<Feed> SubscribeAsync(string rssUrl, bool autoTranscribe = true, CancellationToken ct = default)
+    public async Task<Feed> SubscribeAsync(
+        string rssUrl, bool autoTranscribe = true, bool notifyPushover = false, CancellationToken ct = default)
     {
         if (!YtDlpClient.IsSupportedUrl(rssUrl))
         {
@@ -51,7 +52,8 @@ public class FeedService(
         {
             Title = parsed.Title,
             RssUrl = normalized,
-            AutoTranscribe = autoTranscribe
+            AutoTranscribe = autoTranscribe,
+            NotifyPushover = notifyPushover
         };
 
         db.Feeds.Add(feed);

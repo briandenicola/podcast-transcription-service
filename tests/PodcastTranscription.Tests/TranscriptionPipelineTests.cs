@@ -94,8 +94,11 @@ public class TranscriptionPipelineTests : IDisposable
             client, Options.Create(options), NullLogger<TranscriptSummarizer>.Instance);
 
         return new SummaryService(
-            db, summarizer, client, Options.Create(options), NullLogger<SummaryService>.Instance);
+            db, summarizer, client, Options.Create(options), CreatePushover(db), NullLogger<SummaryService>.Instance);
     }
+
+    private static PushoverNotifier CreatePushover(AppDbContext db) =>
+        new(db, new FakeHttpClientFactory(() => "{}"), NullLogger<PushoverNotifier>.Instance);
 
     private TranscriptionPipeline CreatePipeline(
         AppDbContext db, HttpMessageHandler handler, AudioProcessor audio, TranscriptionOptions options,
@@ -114,7 +117,7 @@ public class TranscriptionPipelineTests : IDisposable
 
         return new TranscriptionPipeline(
             db, media, audio, whisper, ytDlp, summaries ?? CreateSummaries(db), Options.Create(options),
-            new JobNotifier(), NullLogger<TranscriptionPipeline>.Instance);
+            new JobNotifier(), CreatePushover(db), NullLogger<TranscriptionPipeline>.Instance);
     }
 
     private async Task<(Episode Episode, Job Job)> SeedAsync(AppDbContext db)

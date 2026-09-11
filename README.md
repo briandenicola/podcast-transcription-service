@@ -132,6 +132,24 @@ than transcribing the same audio twice.
 Downloads happen inside the job rather than at ingest time, so they queue, retry and report
 progress like everything else instead of blocking whoever pasted the link.
 
+### Pushover notifications
+
+A feed can opt in to a [Pushover](https://pushover.net) push notification once an episode is
+transcribed, and again once it is summarised — useful for a long backlog or a show that airs
+overnight, where nobody is watching the jobs page. The checkbox lives on **Feeds** (when
+subscribing) and on each feed's own page, alongside auto-transcribe and the per-show defaults.
+
+The app token and user key are entered once, on the **Settings** page, and are stored in the
+database rather than `.env` — unlike everything else there, this is a credential from Pushover's
+own site rather than deployment configuration, and saving it takes effect immediately with no
+restart. A **Send test notification** button confirms delivery before relying on it. Leaving
+either field blank on a later save keeps the value already stored, the same way the account
+password form works.
+
+Uploaded or URL-pasted episodes have no feed to opt in on and are never notified — there is
+nothing to have configured for them. Sending never fails a job: a Pushover outage is logged and
+otherwise ignored, the same trade the pipeline already makes for summarisation errors.
+
 ### Per-show defaults
 
 Model, language and prompt attach to a feed and are inherited by every episode it produces.

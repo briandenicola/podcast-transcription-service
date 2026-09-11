@@ -134,6 +134,22 @@ public static class ActionEndpoints
                 return Back("/settings", ex.Message, failed: true);
             }
         }).RequireAuthorization(Roles.AdminPolicy);
+
+        app.MapPost("/settings/pushover", async (HttpRequest request, PushoverNotifier pushover, CancellationToken ct) =>
+        {
+            var form = await request.ReadFormAsync(ct);
+
+            await pushover.SaveSettingsAsync(form["appToken"].ToString(), form["userKey"].ToString(), ct);
+
+            return Back("/settings", "Pushover settings saved.");
+        }).RequireAuthorization(Roles.AdminPolicy);
+
+        app.MapPost("/settings/pushover/test", async (PushoverNotifier pushover, CancellationToken ct) =>
+        {
+            var (success, error) = await pushover.SendTestAsync(ct);
+
+            return Back("/settings", success ? "Test notification sent." : error, failed: !success);
+        }).RequireAuthorization(Roles.AdminPolicy);
     }
 
     // ------------------------------------------------------------------- episodes --
@@ -309,9 +325,11 @@ public static class ActionEndpoints
                 return Back("/feeds", "Paste a feed URL first.", failed: true);
             }
 
+            var notifyPushover = form["notifyPushover"].ToString() is "on" or "true";
+
             try
             {
-                var feed = await feeds.SubscribeAsync(url, ct: ct);
+                var feed = await feeds.SubscribeAsync(url, notifyPushover: notifyPushover, ct: ct);
                 return Back($"/feeds/{feed.Id}", $"Subscribed to {feed.Title}.");
             }
             catch (Exception ex)
@@ -350,6 +368,7 @@ public static class ActionEndpoints
             }
 
             feed.AutoTranscribe = form["autoTranscribe"].ToString() is "on" or "true";
+            feed.NotifyPushover = form["notifyPushover"].ToString() is "on" or "true";
             feed.DefaultLanguage = Blank(form["language"]);
             feed.DefaultPrompt = Blank(form["prompt"]);
 

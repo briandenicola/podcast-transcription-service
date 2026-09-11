@@ -20,6 +20,7 @@ public class SummaryService(
     TranscriptSummarizer summarizer,
     OllamaClient ollama,
     IOptions<OllamaOptions> options,
+    PushoverNotifier pushover,
     ILogger<SummaryService> log)
 {
     private readonly OllamaOptions _options = options.Value;
@@ -97,6 +98,8 @@ public class SummaryService(
 
             log.LogInformation("Summarised transcript {TranscriptId} with {Model} in {Ms}ms",
                 transcriptId, draft.Model, draft.DurationMs);
+
+            await pushover.NotifyEpisodeAsync(transcript.EpisodeId, "Summarized", ct);
 
             return SummaryResult.Succeeded(summary);
         }

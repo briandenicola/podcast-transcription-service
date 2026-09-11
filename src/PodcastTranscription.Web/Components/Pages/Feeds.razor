@@ -19,11 +19,19 @@
         <label class="form-label" for="rss-url">Subscribe to a podcast</label>
         <AuthorizeView Policy="@Roles.MemberPolicy">
             <Authorized>
-                <form method="post" action="/feeds/subscribe" class="input-group">
+                <form method="post" action="/feeds/subscribe">
                     <AntiforgeryToken />
-                    <input id="rss-url" name="rssUrl" class="form-control"
-                           placeholder="https://example.com/feed.xml" />
-                    <button type="submit" class="btn btn-primary">Subscribe</button>
+                    <div class="input-group">
+                        <input id="rss-url" name="rssUrl" class="form-control"
+                               placeholder="https://example.com/feed.xml" />
+                        <button type="submit" class="btn btn-primary">Subscribe</button>
+                    </div>
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="notify-pushover" name="notifyPushover" />
+                        <label class="form-check-label small" for="notify-pushover">
+                            Notify via Pushover when episodes are transcribed and summarised
+                        </label>
+                    </div>
                 </form>
             </Authorized>
             <NotAuthorized>

@@ -12,6 +12,7 @@
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject FeedService Feeds
 @inject IOptions<IngestOptions> IngestSettings
+@inject PushoverNotifier Pushover
 
 <PageTitle>@(_feed?.Title ?? "Feed")</PageTitle>
 
@@ -60,6 +61,21 @@ else
                             <label class="form-check-label" for="auto-transcribe">
                                 Transcribe new episodes automatically
                             </label>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="notify-pushover"
+                                   name="notifyPushover" checked="@_feed.NotifyPushover" />
+                            <label class="form-check-label" for="notify-pushover">
+                                Notify via Pushover when episodes are transcribed and summarised
+                            </label>
+                            @if (!_pushoverConfigured)
+                            {
+                                <div class="form-text">
+                                    Set up the Pushover app token and user key on the <a href="/settings">Settings</a>
+                                    page first, or notifications will not go anywhere.
+                                </div>
+                            }
                         </div>
 
                         <div class="mb-3">
@@ -144,6 +160,7 @@ else
 
     private Feed? _feed;
     private List<Row> _episodes = [];
+    private bool _pushoverConfigured;
 
     /// <summary>
     /// Polling, saving defaults and backfilling are all form posts now (see ActionEndpoints),
@@ -171,6 +188,8 @@ else
         {
             return;
         }
+
+        _pushoverConfigured = await Pushover.IsConfiguredAsync();
 
         _episodes = await db.Episodes
             .Where(e => e.FeedId == FeedId)

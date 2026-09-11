@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
+using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Summarization;
 
 namespace PodcastTranscription.Tests;
@@ -54,7 +55,9 @@ public class SummaryServiceTests : IDisposable
             client, Options.Create(options), NullLogger<TranscriptSummarizer>.Instance);
 
         return new SummaryService(
-            db, summarizer, client, Options.Create(options), NullLogger<SummaryService>.Instance);
+            db, summarizer, client, Options.Create(options),
+            new PushoverNotifier(db, new FakeHttpClientFactory(() => "{}"), NullLogger<PushoverNotifier>.Instance),
+            NullLogger<SummaryService>.Instance);
     }
 
     private static async Task<int> SeedTranscriptAsync(AppDbContext db, int segments = 4)

@@ -107,7 +107,9 @@ builder.Services.AddScoped<UserStore>();
 builder.Services.AddScoped<SignInService>();
 builder.Services.AddScoped<TranscriptSummarizer>();
 builder.Services.AddScoped<SummaryService>();
+builder.Services.AddScoped<PushoverNotifier>();
 builder.Services.AddHttpClient(nameof(FeedService));
+builder.Services.AddHttpClient(nameof(PushoverNotifier));
 
 // Shared across circuits and the worker, so both sides see the same running jobs and the same
 // stream of progress events.

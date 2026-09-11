@@ -29,6 +29,7 @@ public class TranscriptionPipeline(
     SummaryService summaries,
     IOptions<TranscriptionOptions> options,
     JobNotifier notifier,
+    PushoverNotifier pushover,
     ILogger<TranscriptionPipeline> log)
 {
     private readonly TranscriptionOptions _options = options.Value;
@@ -149,6 +150,8 @@ public class TranscriptionPipeline(
         // Saved before summarising, not after. The transcript is the thing an hour of GPU time
         // bought; it is on disk and readable from here on whatever the language model does next.
         await db.SaveChangesAsync(ct);
+
+        await pushover.NotifyEpisodeAsync(episode.Id, "Transcribed", ct);
 
         await SummarizeAsync(job, transcript, ct);
 

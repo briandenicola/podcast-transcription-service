@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Feed> Feeds => Set<Feed>();
     public DbSet<Summary> Summaries => Set<Summary>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<PushoverSettings> PushoverSettings => Set<PushoverSettings>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {

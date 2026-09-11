@@ -13,6 +13,14 @@ public class Feed
     /// <summary>Queue new episodes as they appear, rather than only recording them.</summary>
     public bool AutoTranscribe { get; set; } = true;
 
+    /// <summary>
+    /// Send a Pushover notification for this feed's episodes once they are transcribed and once
+    /// they are summarised. Off by default: notifications need a Pushover app token and user key
+    /// configured in <see cref="PushoverSettings"/> first, so a feed opting in before that is set
+    /// up would just fail quietly.
+    /// </summary>
+    public bool NotifyPushover { get; set; }
+
     // Per-show defaults, inherited by episodes (M4.5).
     public string? DefaultModel { get; set; }
     public string? DefaultLanguage { get; set; }

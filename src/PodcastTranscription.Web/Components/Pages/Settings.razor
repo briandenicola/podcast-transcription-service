@@ -21,6 +21,7 @@
 @inject IOptions<StorageOptions> Storage
 @inject IOptions<OllamaOptions> OllamaSettings
 @inject NavigationManager Navigation
+@inject PushoverNotifier Pushover
 
 <PageTitle>Settings</PageTitle>
 
@@ -103,6 +104,44 @@
                     <dt class="col-6">Submission API</dt>
                     <dd class="col-6">@(Admin.ApiEnabled ? "enabled" : "disabled (no Auth:ApiKey)")</dd>
                 </dl>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+                <span>Pushover</span>
+                <span class="badge @(_pushoverConfigured ? "bg-success" : "bg-secondary")">
+                    @(_pushoverConfigured ? "configured" : "not configured")
+                </span>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    Stored in the database, unlike everything else on this page, and takes effect
+                    immediately — it is a credential from
+                    <a href="https://pushover.net/" target="_blank" rel="noopener">pushover.net</a>,
+                    not deployment configuration. Each feed opts in separately on its own page.
+                </p>
+                <form method="post" action="/settings/pushover">
+                    <AntiforgeryToken />
+                    <div class="mb-2">
+                        <label class="form-label small mb-1" for="pushover-token">App token</label>
+                        <input id="pushover-token" name="appToken" type="password" class="form-control"
+                               placeholder="@(_pushoverConfigured ? "unchanged" : "required")" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small mb-1" for="pushover-user">User key</label>
+                        <input id="pushover-user" name="userKey" type="password" class="form-control"
+                               placeholder="@(_pushoverConfigured ? "unchanged" : "required")" />
+                    </div>
+                    <div class="form-text mb-3">Leave a field blank to keep its current value.</div>
+                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                </form>
+                <form method="post" action="/settings/pushover/test" class="mt-2">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" disabled="@(!_pushoverConfigured)">
+                        Send test notification
+                    </button>
+                </form>
             </div>
         </div>
 
@@ -256,6 +295,7 @@
     private long _sourceBytes;
     private long _preparedBytes;
     private List<FileInfo> _backups = [];
+    private bool _pushoverConfigured;
 
     /// <summary>
     /// Outcomes arrive in the query string rather than in component state, because the actions
@@ -287,5 +327,6 @@
         _backups = Maintenance.ListBackups();
         _whisperHealth = await Whisper.CheckHealthAsync();
         _ollamaHealth = await Ollama.CheckHealthAsync();
+        _pushoverConfigured = await Pushover.IsConfiguredAsync();
     }
 }
