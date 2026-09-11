@@ -133,6 +133,15 @@ else
     <form method="post" action="/episodes/bulk" class="library-table table-wrap">
         <AntiforgeryToken />
         <input type="hidden" name="returnUrl" value="@PageLink(_page)" />
+        <AuthorizeView Policy="@Roles.MemberPolicy" Context="memberContext">
+            <div class="library-bulk-actions">
+                <span>Selected episodes:</span>
+                <button class="btn btn-sm" type="submit" name="action" value="queue">Queue</button>
+                <AuthorizeView Policy="@Roles.AdminPolicy" Context="adminContext">
+                    <button class="btn btn-sm" type="submit" name="action" value="delete">Delete</button>
+                </AuthorizeView>
+            </div>
+        </AuthorizeView>
         <table class="table align-middle">
         <thead>
             <tr>
@@ -190,14 +199,6 @@ else
             }
         </tbody>
         </table>
-        <AuthorizeView Policy="@Roles.MemberPolicy" Context="memberContext">
-            <div class="library-bulk-actions">
-                <button class="btn btn-sm" type="submit" name="action" value="queue">Queue selected</button>
-                <AuthorizeView Policy="@Roles.AdminPolicy" Context="adminContext">
-                    <button class="btn btn-sm" type="submit" name="action" value="delete">Delete selected</button>
-                </AuthorizeView>
-            </div>
-        </AuthorizeView>
     </form>
 
     <div class="pwa-library-list">

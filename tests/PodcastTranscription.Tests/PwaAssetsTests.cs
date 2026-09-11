@@ -96,6 +96,7 @@ public class PwaAssetsTests
         Assert.Contains("name=\"episodeIds\"", home);
         Assert.Contains("value=\"queue\"", home);
         Assert.Contains("value=\"delete\"", home);
+        Assert.Contains("Selected episodes:", home);
         Assert.Contains("name=\"returnUrl\" value=\"@PageLink(_page)\"", home);
         Assert.Contains("@page \"/delete/episodes\"", confirmation);
         Assert.Contains("app.MapPost(\"/episodes/bulk\"", actions);

@@ -364,11 +364,22 @@ textarea:focus {
 }
 
 .library-bulk-actions {
+    position: sticky;
+    z-index: 10;
+    top: 0;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: var(--w95-gap-sm);
     padding: var(--w95-gap);
-    border-top: 1px solid var(--w95-shadow);
+    background: var(--w95-surface);
+    border-bottom: 1px solid var(--w95-shadow);
+    box-shadow: 0 2px 3px rgba(0, 0, 0, .25);
+}
+
+.library-bulk-actions > span {
+    margin-right: auto;
+    font-weight: bold;
 }
 
 /* ------------------------------------------------------- cards and alerts -- */
