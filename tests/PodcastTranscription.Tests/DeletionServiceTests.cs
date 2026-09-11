@@ -308,6 +308,39 @@ public class DeletionServiceTests : IDisposable
         Assert.Empty(verify.Episodes);
     }
 
+    [Fact]
+    public async Task Deleting_a_feed_sourced_episode_tombstones_its_guid()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        db.Feeds.Add(new Feed { Title = "The Build Log", RssUrl = "https://example.com/feed.xml" });
+        await db.SaveChangesAsync();
+        var feed = await db.Feeds.SingleAsync();
+
+        var (episode, _, _) = await SeedAsync(db);
+        episode.FeedId = feed.Id;
+        episode.FeedItemGuid = "abc";
+        await db.SaveChangesAsync();
+
+        await CreateService(db).DeleteEpisodeAsync(episode.Id);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        var tombstone = await verify.DeletedFeedItems.SingleAsync();
+        Assert.Equal(feed.Id, tombstone.FeedId);
+        Assert.Equal("abc", tombstone.FeedItemGuid);
+    }
+
+    [Fact]
+    public async Task Deleting_a_manually_imported_episode_writes_no_tombstone()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var (episode, _, _) = await SeedAsync(db); // no FeedId / FeedItemGuid set
+
+        await CreateService(db).DeleteEpisodeAsync(episode.Id);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        Assert.Empty(verify.DeletedFeedItems);
+    }
+
     private sealed class FakeHost(string contentRoot) : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = "Test";

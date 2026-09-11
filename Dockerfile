@@ -14,13 +14,31 @@ RUN dotnet publish src/PodcastTranscription.Web/PodcastTranscription.Web.csproj 
 # ---- runtime --------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-# yt-dlp is fetched below as a self-contained binary rather than from apt, whose builds go
-# stale within weeks.
-# ffmpeg decodes and resamples, curl backs the healthcheck, and gosu lets the entrypoint drop
-# privileges after fixing volume ownership.
+# yt-dlp and ffmpeg are both fetched below as self-contained static binaries rather than from
+# apt. apt's ffmpeg pulls in ~180 packages (fontconfig, libsdl2, X11 libraries, audio backends)
+# that a headless service never touches, and reinstalling that whole dependency tree from
+# scratch - which happens whenever this base image's digest moves and evicts the layer cache -
+# can take twenty-plus minutes on a slow mirror. xz-utils is the one apt package still needed,
+# to unpack the static ffmpeg tarball; curl backs the healthcheck and the downloads themselves;
+# gosu lets the entrypoint drop privileges after fixing volume ownership.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates gosu \
+    && apt-get install -y --no-install-recommends xz-utils curl ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/*
+
+# johnvansickle.com's "release" build is the latest stable static build, not a specific pinned
+# version - there is no per-version URL to pin to, so integrity is checked against the vendor's
+# own md5 instead. ffprobe ships in the same tarball and is used to measure episode duration.
+RUN set -eux; \
+    curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ffmpeg-release-amd64-static.tar.xz; \
+    curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz.md5 -o /tmp/ffmpeg-release-amd64-static.tar.xz.md5; \
+    (cd /tmp && md5sum -c ffmpeg-release-amd64-static.tar.xz.md5); \
+    mkdir -p /tmp/ffmpeg-extract; \
+    tar -xf /tmp/ffmpeg-release-amd64-static.tar.xz -C /tmp/ffmpeg-extract --strip-components=1; \
+    mv /tmp/ffmpeg-extract/ffmpeg /tmp/ffmpeg-extract/ffprobe /usr/local/bin/; \
+    chmod 0755 /usr/local/bin/ffmpeg /usr/local/bin/ffprobe; \
+    rm -rf /tmp/ffmpeg-release-amd64-static.tar.xz /tmp/ffmpeg-release-amd64-static.tar.xz.md5 /tmp/ffmpeg-extract; \
+    /usr/local/bin/ffmpeg -version; \
+    /usr/local/bin/ffprobe -version
 
 # The Linux release is a PyInstaller bundle: it carries its own interpreter, so nothing
 # Python-shaped ends up on the image. Pin YTDLP_VERSION for reproducible builds.

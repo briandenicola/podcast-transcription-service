@@ -105,6 +105,25 @@ public class DeletionService(AppDbContext db, MediaStore media, RunningJobs runn
 
         await DeleteTranscriptRowsAsync(transcriptIds, ct);
 
+        // Remember the feed's guid for this episode so the next poll does not mistake "deleted"
+        // for "never seen" and bring it straight back. Only feed-sourced episodes have a guid to
+        // remember; manual imports have nothing for a future poll to re-discover anyway.
+        if (episode.FeedId is int feedId && !string.IsNullOrEmpty(episode.FeedItemGuid))
+        {
+            var alreadyTombstoned = await db.DeletedFeedItems
+                .AnyAsync(d => d.FeedId == feedId && d.FeedItemGuid == episode.FeedItemGuid, ct);
+
+            if (!alreadyTombstoned)
+            {
+                db.DeletedFeedItems.Add(new DeletedFeedItem
+                {
+                    FeedId = feedId,
+                    FeedItemGuid = episode.FeedItemGuid
+                });
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
         await db.Jobs.Where(j => j.EpisodeId == episodeId).ExecuteDeleteAsync(ct);
         await db.Episodes.Where(e => e.Id == episodeId).ExecuteDeleteAsync(ct);
 

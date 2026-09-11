@@ -29,9 +29,18 @@ public class SummarizationWorkerTests : IDisposable
 
     public SummarizationWorkerTests()
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
+        // Unlike the other test files, this one has a real background worker thread reading and
+        // writing the database concurrently with the test's own polling. Handing every
+        // AppDbContext the exact same SqliteConnection object (as elsewhere) means two threads
+        // can end up calling into that one object at once, which SQLite's ADO.NET driver does
+        // not support and surfaces as "unable to delete/modify user-function due to active
+        // statements". A shared-cache URI keeps the in-memory database alive for the test's
+        // lifetime while letting each AppDbContext open its own connection, which is what
+        // actually makes concurrent access safe.
+        var connectionString = $"Data Source=file:{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+        _connection = new SqliteConnection(connectionString);
         _connection.Open();
-        _dbOptions = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options;
+        _dbOptions = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connectionString).Options;
 
         using var db = new AppDbContext(_dbOptions);
         db.Database.Migrate();

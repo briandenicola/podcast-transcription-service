@@ -164,7 +164,14 @@ public class FeedService(
             .Select(e => e.FeedItemGuid!)
             .ToListAsync(ct);
 
-        var seen = known.ToHashSet();
+        // A deleted episode's guid must count as "seen" too, or the next poll mistakes the
+        // deletion for having never recorded it and brings it straight back.
+        var deleted = await db.DeletedFeedItems
+            .Where(d => d.FeedId == feed.Id && guids.Contains(d.FeedItemGuid))
+            .Select(d => d.FeedItemGuid)
+            .ToListAsync(ct);
+
+        var seen = known.Concat(deleted).ToHashSet();
         var added = new List<Episode>();
 
         foreach (var item in candidates)

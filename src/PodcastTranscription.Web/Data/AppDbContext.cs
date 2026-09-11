@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Summary> Summaries => Set<Summary>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<PushoverSettings> PushoverSettings => Set<PushoverSettings>();
+    public DbSet<DeletedFeedItem> DeletedFeedItems => Set<DeletedFeedItem>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -103,5 +104,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
 
         b.Entity<Feed>(e => e.HasIndex(x => x.RssUrl).IsUnique());
+
+        // Unique so re-deleting an episode that somehow got re-added (or a delete retried after
+        // a partial failure) does not throw or double-record the tombstone.
+        b.Entity<DeletedFeedItem>(e => e.HasIndex(x => new { x.FeedId, x.FeedItemGuid }).IsUnique());
     }
 }

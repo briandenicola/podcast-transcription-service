@@ -315,4 +315,36 @@ public class FeedServiceTests : IDisposable
 
         Assert.Equal(2, await db.Jobs.CountAsync());
     }
+
+    [Fact]
+    public async Task A_deleted_episode_does_not_come_back_on_the_next_poll()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var http = new FakeHttpClientFactory(() => FeedWith(("1", "Ep. 1"), ("2", "Ep. 2")));
+        var service = CreateService(db, http);
+
+        var feed = await service.SubscribeAsync(FeedUrl);
+        var episode = await db.Episodes.SingleAsync(e => e.FeedItemGuid == "2");
+
+        // Someone deletes the episode; the feed itself never changes.
+        var deletion = new DeletionService(
+            db, new MediaStore(Options.Create(new StorageOptions()), new FakeHost()),
+            new RunningJobs(), new JobNotifier(), NullLogger<DeletionService>.Instance);
+        await deletion.DeleteEpisodeAsync(episode.Id);
+
+        var outcome = await service.PollAsync(feed.Id);
+
+        Assert.Equal(0, outcome.Discovered);
+        Assert.Equal(1, await db.Episodes.CountAsync());
+        Assert.Null(await db.Episodes.FirstOrDefaultAsync(e => e.FeedItemGuid == "2"));
+    }
+
+    private sealed class FakeHost : Microsoft.Extensions.Hosting.IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Test";
+        public string ApplicationName { get; set; } = "Tests";
+        public string ContentRootPath { get; set; } = Path.GetTempPath();
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
+    }
 }
