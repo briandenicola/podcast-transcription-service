@@ -60,6 +60,14 @@ public static class ActionEndpoints
         return Results.Redirect($"{path}{separator}{key}={Uri.EscapeDataString(message)}");
     }
 
+    private static string SafeLibraryReturnUrl(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl)
+        && returnUrl.StartsWith('/')
+        && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+        && Uri.TryCreate(returnUrl, UriKind.Relative, out _)
+            ? returnUrl
+            : "/";
+
     // ------------------------------------------------------------------- settings --
 
     private static void MapSettings(WebApplication app)
@@ -188,6 +196,54 @@ public static class ActionEndpoints
                 ct: ct);
 
             return Back($"/episodes/{id}", "Queued for transcription.");
+        }).RequireAuthorization(Roles.MemberPolicy);
+
+        app.MapPost("/episodes/bulk", async (
+            HttpRequest request,
+            IAntiforgery antiforgery,
+            AppDbContext db,
+            ClaimsPrincipal user,
+            JobQueue queue,
+            CancellationToken ct) =>
+        {
+            await antiforgery.ValidateRequestAsync(request.HttpContext);
+            var form = await request.ReadFormAsync(ct);
+            var returnUrl = SafeLibraryReturnUrl(form["returnUrl"].ToString());
+            var ids = form["episodeIds"]
+                .Select(value => int.TryParse(value, out var id) ? id : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                .Take(100)
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                return Back(returnUrl, "Select at least one episode.", failed: true);
+            }
+
+            if (form["action"] == "delete")
+            {
+                var query = string.Join("&", ids.Select(id => $"episodeIds={id}"));
+                return Results.Redirect(
+                    $"/delete/episodes?{query}&returnUrl={Uri.EscapeDataString(returnUrl)}");
+            }
+
+            if (form["action"] != "queue")
+            {
+                return Back(returnUrl, "Choose an action for the selected episodes.", failed: true);
+            }
+
+            var existingIds = await db.Episodes
+                .Where(e => ids.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToListAsync(ct);
+
+            foreach (var id in existingIds)
+            {
+                await queue.EnqueueAsync(id, queuedBy: SignedInName(user), ct: ct);
+            }
+
+            return Back(returnUrl, $"Queued {existingIds.Count} episode(s) for transcription.");
         }).RequireAuthorization(Roles.MemberPolicy);
 
         app.MapPost("/episodes/{id:int}/summarize", async (

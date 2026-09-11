@@ -86,6 +86,24 @@ public class PwaAssetsTests
     }
 
     [Fact]
+    public void Desktop_library_supports_bulk_actions_and_preserves_filters_when_deleting()
+    {
+        var home = File.ReadAllText(Component("Pages", "Home.razor"));
+        var confirmation = File.ReadAllText(Component("Pages", "ConfirmDelete.razor"));
+        var actions = File.ReadAllText(Source("Endpoints", "ActionEndpoints.cs"));
+        var deletion = File.ReadAllText(Source("Endpoints", "DeletionEndpoints.cs"));
+
+        Assert.Contains("name=\"episodeIds\"", home);
+        Assert.Contains("value=\"queue\"", home);
+        Assert.Contains("value=\"delete\"", home);
+        Assert.Contains("name=\"returnUrl\" value=\"@PageLink(_page)\"", home);
+        Assert.Contains("@page \"/delete/episodes\"", confirmation);
+        Assert.Contains("app.MapPost(\"/episodes/bulk\"", actions);
+        Assert.Contains("app.MapPost(\"/delete/episodes\"", deletion);
+        Assert.Contains("SafeLibraryReturnUrl", deletion);
+    }
+
+    [Fact]
     public void Pwa_episode_actions_use_a_title_menu_and_a_large_empty_state_transcribe_action()
     {
         var episode = File.ReadAllText(Component("Pages", "EpisodeDetail.razor"));

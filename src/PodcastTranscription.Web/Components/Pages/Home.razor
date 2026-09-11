@@ -4,6 +4,7 @@
 @using PodcastTranscription.Web.Domain
 @using PodcastTranscription.Web.Services
 @using PodcastTranscription.Web.Services.Search
+@using PodcastTranscription.Web.Services.Security
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject SearchService Search
 
@@ -109,6 +110,11 @@
     <div class="alert alert-warning py-2">@DeleteError</div>
 }
 
+@if (Notice is not null)
+{
+    <div class="alert alert-success py-2">@Notice</div>
+}
+
 @if (_episodes is null)
 {
     <p class="text-muted">Loading…</p>
@@ -124,10 +130,13 @@ else if (_episodes.Count == 0)
 }
 else
 {
-    <div class="library-table table-wrap">
-    <table class="table align-middle">
+    <form method="post" action="/episodes/bulk" class="library-table table-wrap">
+        <AntiforgeryToken />
+        <input type="hidden" name="returnUrl" value="@PageLink(_page)" />
+        <table class="table align-middle">
         <thead>
             <tr>
+                <th class="episode-select-column"><span class="visually-hidden">Select</span></th>
                 <th>Title</th>
                 <th>Show</th>
                 <th class="text-end">Duration</th>
@@ -140,6 +149,12 @@ else
             @foreach (var row in _episodes)
             {
                 <tr>
+                    <td class="episode-select-column">
+                        <AuthorizeView Policy="@Roles.MemberPolicy">
+                            <input class="form-check-input" type="checkbox" name="episodeIds"
+                                   value="@row.Episode.Id" aria-label="Select @row.Episode.Title" />
+                        </AuthorizeView>
+                    </td>
                     <td><a href="/episodes/@row.Episode.Id" class="text-decoration-none">@row.Episode.Title</a></td>
                     <td class="text-muted">@(row.Episode.Show ?? "—")</td>
                     <td class="text-end font-monospace">@TimeFormat.Duration(row.Episode.DurationSec)</td>
@@ -168,14 +183,22 @@ else
                     </td>
                     <td class="text-end text-nowrap">
                         <a class="btn btn-sm btn-outline-secondary me-1" href="/episodes/@row.Episode.Id">Open</a>
-                        <a class="btn btn-sm" href="/delete/episode/@row.Episode.Id"
+                        <a class="btn btn-sm" href="@DeleteLink(row.Episode.Id)"
                            title="Delete this episode, its transcripts and its audio">Delete</a>
                     </td>
                 </tr>
             }
         </tbody>
-    </table>
-    </div>
+        </table>
+        <AuthorizeView Policy="@Roles.MemberPolicy" Context="memberContext">
+            <div class="library-bulk-actions">
+                <button class="btn btn-sm" type="submit" name="action" value="queue">Queue selected</button>
+                <AuthorizeView Policy="@Roles.AdminPolicy" Context="adminContext">
+                    <button class="btn btn-sm" type="submit" name="action" value="delete">Delete selected</button>
+                </AuthorizeView>
+            </div>
+        </AuthorizeView>
+    </form>
 
     <div class="pwa-library-list">
         @foreach (var row in _episodes)
@@ -191,7 +214,7 @@ else
                 <div class="pwa-library-footer">
                     <div class="pwa-library-actions">
                         <a class="btn btn-sm" href="/episodes/@row.Episode.Id">Open</a>
-                        <a class="btn btn-sm" href="/delete/episode/@row.Episode.Id"
+                        <a class="btn btn-sm" href="@DeleteLink(row.Episode.Id)"
                            title="Delete this episode, its transcripts and its audio">Delete</a>
                     </div>
                     <time datetime="@row.Episode.CreatedAt.ToString("O")">
@@ -237,6 +260,8 @@ else
 
     /// <summary>A refusal handed back by the delete endpoint, e.g. a job still running.</summary>
     [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "notice")] private string? Notice { get; set; }
 
     private static readonly (string Value, string Label)[] States =
     [
@@ -309,6 +334,9 @@ else
 
         return parts.Count == 0 ? "/" : "/?" + string.Join("&", parts);
     }
+
+    private string DeleteLink(int episodeId) =>
+        $"/delete/episode/{episodeId}?returnUrl={Uri.EscapeDataString(PageLink(_page))}";
 
     protected override async Task OnParametersSetAsync()
     {

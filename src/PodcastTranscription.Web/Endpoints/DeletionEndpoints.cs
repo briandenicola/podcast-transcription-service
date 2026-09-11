@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Antiforgery;
 using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Security;
 
@@ -17,13 +18,56 @@ public static class DeletionEndpoints
 {
     public static void MapDeletionEndpoints(this WebApplication app)
     {
-        app.MapPost("/delete/episode/{id:int}", async (int id, DeletionService deletion, CancellationToken ct) =>
+        app.MapPost("/delete/episode/{id:int}", async (
+            int id, HttpRequest request, IAntiforgery antiforgery,
+            DeletionService deletion, CancellationToken ct) =>
         {
+            await antiforgery.ValidateRequestAsync(request.HttpContext);
+            var form = await request.ReadFormAsync(ct);
+            var returnUrl = SafeLibraryReturnUrl(form["returnUrl"].ToString());
             var result = await deletion.DeleteEpisodeAsync(id, ct);
 
             return result.Deleted
-                ? Results.Redirect("/")
-                : Results.Redirect($"/episodes/{id}?error=" + Uri.EscapeDataString(result.Refusal!));
+                ? Results.Redirect(returnUrl ?? "/")
+                : Results.Redirect(AddMessage(returnUrl ?? $"/episodes/{id}", "error", result.Refusal!));
+        }).RequireAuthorization(Roles.AdminPolicy);
+
+        app.MapPost("/delete/episodes", async (
+            HttpRequest request, IAntiforgery antiforgery,
+            DeletionService deletion, CancellationToken ct) =>
+        {
+            await antiforgery.ValidateRequestAsync(request.HttpContext);
+            var form = await request.ReadFormAsync(ct);
+            var returnUrl = SafeLibraryReturnUrl(form["returnUrl"].ToString()) ?? "/";
+            var ids = form["episodeIds"]
+                .Select(value => int.TryParse(value, out var id) ? id : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                .Take(100)
+                .ToList();
+
+            var deleted = 0;
+            var refusals = new List<string>();
+            foreach (var id in ids)
+            {
+                var result = await deletion.DeleteEpisodeAsync(id, ct);
+                if (result.Deleted)
+                {
+                    deleted++;
+                }
+                else if (result.Refusal is { } refusal)
+                {
+                    refusals.Add(refusal);
+                }
+            }
+
+            var message = refusals.Count == 0
+                ? $"Deleted {deleted} episode(s)."
+                : $"Deleted {deleted} episode(s); {refusals.Count} could not be deleted. {refusals[0]}";
+            return Results.Redirect(AddMessage(
+                returnUrl,
+                refusals.Count == 0 ? "notice" : "error",
+                message));
         }).RequireAuthorization(Roles.AdminPolicy);
 
         app.MapPost("/delete/transcript/{id:int}", async (
@@ -44,5 +88,19 @@ public static class DeletionEndpoints
                 ? "/jobs"
                 : "/jobs?error=" + Uri.EscapeDataString(result.Refusal!));
         }).RequireAuthorization(Roles.AdminPolicy);
+    }
+
+    private static string? SafeLibraryReturnUrl(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl)
+        && returnUrl.StartsWith('/')
+        && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+        && Uri.TryCreate(returnUrl, UriKind.Relative, out _)
+            ? returnUrl
+            : null;
+
+    private static string AddMessage(string path, string key, string message)
+    {
+        var separator = path.Contains('?') ? "&" : "?";
+        return $"{path}{separator}{key}={Uri.EscapeDataString(message)}";
     }
 }

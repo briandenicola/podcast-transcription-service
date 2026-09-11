@@ -358,6 +358,19 @@ textarea:focus {
 
 .table-wrap { background: var(--w95-field); padding: 3px; }
 
+.episode-select-column {
+    width: 2.25rem;
+    text-align: center;
+}
+
+.library-bulk-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--w95-gap-sm);
+    padding: var(--w95-gap);
+    border-top: 1px solid var(--w95-shadow);
+}
+
 /* ------------------------------------------------------- cards and alerts -- */
 
 .card {

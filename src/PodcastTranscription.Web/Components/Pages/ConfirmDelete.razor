@@ -1,4 +1,5 @@
 @page "/delete/{Kind}/{Id:int}"
+@page "/delete/episodes"
 @using Microsoft.AspNetCore.Components.Endpoints
 @using Microsoft.EntityFrameworkCore
 @using PodcastTranscription.Web.Data
@@ -39,6 +40,11 @@
             <div class="confirm-actions">
                 <form method="post" action="@PostAction" class="d-inline">
                     <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@PostReturnUrl" />
+                    @foreach (var episodeId in _bulkEpisodeIds)
+                    {
+                        <input type="hidden" name="episodeIds" value="@episodeId" />
+                    }
                     <button class="btn" type="submit">Delete</button>
                 </form>
                 <a class="btn" href="@BackHref">Cancel</a>
@@ -52,20 +58,32 @@
     [Parameter] public int Id { get; set; }
 
     [SupplyParameterFromQuery(Name = "episodeId")] private int? EpisodeId { get; set; }
+    [SupplyParameterFromQuery(Name = "episodeIds")] private int[] EpisodeIds { get; set; } = [];
+    [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
 
     private bool _notFound;
     private string _question = string.Empty;
     private readonly List<string> _consequences = [];
+    private readonly List<int> _bulkEpisodeIds = [];
     private string _backHref = "/";
     private string _postAction = "/";
 
     private string BackHref => _backHref;
     private string PostAction => _postAction;
+    private string PostReturnUrl => _bulkEpisodeIds.Count > 0 ? BackHref : SafeReturnUrl() ?? string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
+        _notFound = false;
         _consequences.Clear();
+        _bulkEpisodeIds.Clear();
         await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (EpisodeIds.Length > 0)
+        {
+            await DescribeEpisodesAsync(db);
+            return;
+        }
 
         switch (Kind.ToLowerInvariant())
         {
@@ -118,8 +136,53 @@
         }
 
         _backHref = $"/episodes/{Id}";
+        if (SafeReturnUrl() is { } returnUrl)
+        {
+            _backHref = returnUrl;
+        }
         _postAction = $"/delete/episode/{Id}";
     }
+
+    private async Task DescribeEpisodesAsync(AppDbContext db)
+    {
+        var ids = EpisodeIds.Distinct().Take(100).ToList();
+        var episodes = await db.Episodes
+            .Where(e => ids.Contains(e.Id))
+            .Select(e => new
+            {
+                e.Id,
+                Transcripts = e.Transcripts.Count(),
+                Jobs = e.Jobs.Count(),
+                HasAudio = e.AudioPath != "" || e.PreparedAudioPath != null
+            })
+            .ToListAsync();
+
+        _backHref = SafeReturnUrl() ?? "/";
+        if (episodes.Count == 0)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _bulkEpisodeIds.AddRange(episodes.Select(e => e.Id));
+        _question = $"Delete {episodes.Count} selected episode(s)?";
+        _consequences.Add($"{episodes.Sum(e => e.Transcripts)} transcript(s)");
+        _consequences.Add($"{episodes.Sum(e => e.Jobs)} job(s) from the history");
+        if (episodes.Any(e => e.HasAudio))
+        {
+            _consequences.Add("Their audio files, which cannot be recovered");
+        }
+
+        _postAction = "/delete/episodes";
+    }
+
+    private string? SafeReturnUrl() =>
+        !string.IsNullOrWhiteSpace(ReturnUrl)
+        && ReturnUrl.StartsWith('/')
+        && !ReturnUrl.StartsWith("//", StringComparison.Ordinal)
+        && Uri.TryCreate(ReturnUrl, UriKind.Relative, out _)
+            ? ReturnUrl
+            : null;
 
     private async Task DescribeTranscriptAsync(AppDbContext db)
     {
