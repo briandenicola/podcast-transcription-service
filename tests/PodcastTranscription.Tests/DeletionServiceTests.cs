@@ -121,6 +121,26 @@ public class DeletionServiceTests : IDisposable
         Assert.Empty(verify.Jobs);
     }
 
+    [Fact]
+    public async Task Multiple_episodes_can_be_deleted_through_one_service_scope()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        var first = await SeedAsync(db);
+        var second = await SeedAsync(db);
+        var service = CreateService(db);
+
+        var firstResult = await service.DeleteEpisodeAsync(first.Episode.Id);
+        var secondResult = await service.DeleteEpisodeAsync(second.Episode.Id);
+
+        Assert.True(firstResult.Deleted);
+        Assert.True(secondResult.Deleted);
+
+        await using var verify = new AppDbContext(_dbOptions);
+        Assert.Empty(verify.Episodes);
+        Assert.Empty(verify.Transcripts);
+        Assert.Empty(verify.Jobs);
+    }
+
     /// <summary>
     /// The index is a separate table kept in step by triggers. If a cascade removed the segments
     /// without firing them, search would keep returning a deleted episode.

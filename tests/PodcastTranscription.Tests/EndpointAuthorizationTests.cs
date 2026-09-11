@@ -77,6 +77,20 @@ public class EndpointAuthorizationTests
     }
 
     [Fact]
+    public void Delete_confirmation_routes_do_not_collide_with_post_routes()
+    {
+        var page = File.ReadAllText(ComponentRoot("Pages", "ConfirmDelete.razor"));
+        var endpoints = File.ReadAllText(Path.Combine(EndpointRoot(), "DeletionEndpoints.cs"));
+
+        Assert.Contains("@page \"/delete/{Kind}/{Id:int}\"", page);
+        Assert.Contains("@page \"/delete/episodes\"", page);
+        Assert.DoesNotContain("app.MapPost(\"/delete/episode/{id:int}\"", endpoints);
+        Assert.DoesNotContain("app.MapPost(\"/delete/episodes\"", endpoints);
+        Assert.All(MapPost.Matches(endpoints).Cast<Match>(),
+            match => Assert.EndsWith("/execute", match.Groups["route"].Value));
+    }
+
+    [Fact]
     public void The_guard_is_actually_reading_the_endpoints()
     {
         var found = Endpoints().Count();
@@ -101,5 +115,23 @@ public class EndpointAuthorizationTests
         }
 
         throw new DirectoryNotFoundException("Could not find the Endpoints directory.");
+    }
+
+    private static string ComponentRoot(params string[] parts)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var root = Path.Combine(directory.FullName, "src", "PodcastTranscription.Web", "Components");
+            if (Directory.Exists(root))
+            {
+                return Path.Combine([root, .. parts]);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find the Components directory.");
     }
 }

@@ -140,7 +140,7 @@
         {
             _backHref = returnUrl;
         }
-        _postAction = $"/delete/episode/{Id}";
+        _postAction = $"/delete/episode/{Id}/execute";
     }
 
     private async Task DescribeEpisodesAsync(AppDbContext db)
@@ -173,7 +173,7 @@
             _consequences.Add("Their audio files, which cannot be recovered");
         }
 
-        _postAction = "/delete/episodes";
+        _postAction = "/delete/episodes/execute";
     }
 
     private string? SafeReturnUrl() =>
@@ -204,7 +204,7 @@
         _consequences.Add("The episode and its audio are kept, so it can be transcribed again");
 
         _backHref = $"/episodes/{transcript.EpisodeId}";
-        _postAction = $"/delete/transcript/{Id}?episodeId={transcript.EpisodeId}";
+        _postAction = $"/delete/transcript/{Id}/execute?episodeId={transcript.EpisodeId}";
     }
 
     private async Task DescribeJobAsync(AppDbContext db)
@@ -225,6 +225,6 @@
         _consequences.Add("Only the job history row. The transcript it produced is kept");
 
         _backHref = "/jobs";
-        _postAction = $"/delete/job/{Id}";
+        _postAction = $"/delete/job/{Id}/execute";
     }
 }

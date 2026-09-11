@@ -18,7 +18,7 @@ public static class DeletionEndpoints
 {
     public static void MapDeletionEndpoints(this WebApplication app)
     {
-        app.MapPost("/delete/episode/{id:int}", async (
+        app.MapPost("/delete/episode/{id:int}/execute", async (
             int id, HttpRequest request, IAntiforgery antiforgery,
             DeletionService deletion, CancellationToken ct) =>
         {
@@ -32,7 +32,7 @@ public static class DeletionEndpoints
                 : Results.Redirect(AddMessage(returnUrl ?? $"/episodes/{id}", "error", result.Refusal!));
         }).RequireAuthorization(Roles.AdminPolicy);
 
-        app.MapPost("/delete/episodes", async (
+        app.MapPost("/delete/episodes/execute", async (
             HttpRequest request, IAntiforgery antiforgery,
             DeletionService deletion, CancellationToken ct) =>
         {
@@ -70,7 +70,7 @@ public static class DeletionEndpoints
                 message));
         }).RequireAuthorization(Roles.AdminPolicy);
 
-        app.MapPost("/delete/transcript/{id:int}", async (
+        app.MapPost("/delete/transcript/{id:int}/execute", async (
             int id, int episodeId, DeletionService deletion, CancellationToken ct) =>
         {
             var result = await deletion.DeleteTranscriptAsync(id, ct);
@@ -80,7 +80,7 @@ public static class DeletionEndpoints
                 : $"/episodes/{episodeId}?error=" + Uri.EscapeDataString(result.Refusal!));
         }).RequireAuthorization(Roles.AdminPolicy);
 
-        app.MapPost("/delete/job/{id:int}", async (int id, DeletionService deletion, CancellationToken ct) =>
+        app.MapPost("/delete/job/{id:int}/execute", async (int id, DeletionService deletion, CancellationToken ct) =>
         {
             var result = await deletion.DeleteJobAsync(id, ct);
 

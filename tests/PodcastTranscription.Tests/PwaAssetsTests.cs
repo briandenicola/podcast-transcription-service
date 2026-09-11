@@ -100,7 +100,7 @@ public class PwaAssetsTests
         Assert.Contains("name=\"returnUrl\" value=\"@PageLink(_page)\"", home);
         Assert.Contains("@page \"/delete/episodes\"", confirmation);
         Assert.Contains("app.MapPost(\"/episodes/bulk\"", actions);
-        Assert.Contains("app.MapPost(\"/delete/episodes\"", deletion);
+        Assert.Contains("app.MapPost(\"/delete/episodes/execute\"", deletion);
         Assert.Contains("SafeLibraryReturnUrl", deletion);
     }
 
