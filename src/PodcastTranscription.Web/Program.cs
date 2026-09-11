@@ -44,6 +44,7 @@ builder.Services.Configure<IngestOptions>(builder.Configuration.GetSection(Inges
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<MaintenanceOptions>(builder.Configuration.GetSection(MaintenanceOptions.SectionName));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection(OllamaOptions.SectionName));
+builder.Services.Configure<AppOptions>(builder.Configuration.GetSection(AppOptions.SectionName));
 
 var storage = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 var dataDirectory = Path.IsPathRooted(storage.DataPath)
@@ -116,12 +117,14 @@ builder.Services.AddHttpClient(nameof(PushoverNotifier));
 builder.Services.AddSingleton<RunningJobs>();
 builder.Services.AddSingleton<JobNotifier>();
 
-// Summarising outlives the request that starts it, so the state has to be a singleton too.
-builder.Services.AddSingleton<SummaryRunner>();
-
 builder.Services.AddHostedService<TranscriptionWorker>();
 builder.Services.AddHostedService<FeedPoller>();
 builder.Services.AddHostedService<MaintenanceWorker>();
+
+// Manual summarisation is queued the same way transcription is — a real Job row, not an
+// in-memory run — so it survives a restart, shows up on the Jobs page, and is capped by
+// Ollama:MaxConcurrentSummaries rather than however many people clicked the button.
+builder.Services.AddHostedService<SummarizationWorker>();
 
 var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 

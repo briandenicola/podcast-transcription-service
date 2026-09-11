@@ -45,6 +45,10 @@ services:
       Ollama__Model: "${OLLAMA_MODEL:-llama3.1:8b}"
       # Summarise as the last step of every job. False leaves it to the button on the episode page.
       Ollama__AutoSummarize: "${OLLAMA_AUTO_SUMMARIZE:-true}"
+      # How many manually-triggered summaries run at once; the rest queue on the Jobs page.
+      Ollama__MaxConcurrentSummaries: "${OLLAMA_MAX_CONCURRENT_SUMMARIES:-1}"
+      Ollama__MaxAttempts: "${OLLAMA_MAX_ATTEMPTS:-3}"
+      Ollama__RetryBaseSeconds: "${OLLAMA_RETRY_BASE_SECONDS:-30}"
       # Ollama's own default context is 2048 tokens, which silently truncates anything
       # episode-sized. Raise both together: the window has to fit inside the context.
       Ollama__ContextTokens: "${OLLAMA_CONTEXT_TOKENS:-8192}"
@@ -59,6 +63,10 @@ services:
       Ollama__RequestTimeoutMinutes: "${OLLAMA_TIMEOUT_MINUTES:-30}"
       # Optional steer appended to the summary instructions — host names, house style, anything.
       Ollama__ExtraInstructions: "${OLLAMA_EXTRA_INSTRUCTIONS:-}"
+
+      # This app's own public address, so a Pushover notification can link back to the episode.
+      # Unset, notifications carry no link.
+      App__PublicBaseUrl: "${APP_PUBLIC_BASE_URL:-}"
 
       # The app refuses to start with auth enabled and no password configured.
       Auth__Enabled: "${AUTH_ENABLED:-true}"

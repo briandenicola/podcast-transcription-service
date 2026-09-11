@@ -56,7 +56,7 @@ public class SummaryServiceTests : IDisposable
 
         return new SummaryService(
             db, summarizer, client, Options.Create(options),
-            new PushoverNotifier(db, new FakeHttpClientFactory(() => "{}"), NullLogger<PushoverNotifier>.Instance),
+            new PushoverNotifier(db, new FakeHttpClientFactory(() => "{}"), Options.Create(new AppOptions()), NullLogger<PushoverNotifier>.Instance),
             NullLogger<SummaryService>.Instance);
     }
 

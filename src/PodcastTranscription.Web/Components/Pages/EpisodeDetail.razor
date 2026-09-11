@@ -13,7 +13,6 @@
 @inject JobNotifier Notifier
 @inject DeletionService Deletion
 @inject SummaryService Summaries
-@inject SummaryRunner Runner
 @inject NavigationManager Navigation
 @using Microsoft.AspNetCore.WebUtilities
 @inject IJSRuntime JS
@@ -394,7 +393,7 @@ else
             <SummaryCard Summary="selected.Summary"
                          EpisodeId="EpisodeId"
                          TranscriptId="selected.Id"
-                         Run="SummaryRun"
+                         Job="SummaryJob"
                          Enabled="Summaries.Enabled"
                          ModelName="@Summaries.Model" />
 
@@ -472,6 +471,7 @@ else
     private List<Transcript> _transcripts = [];
     private Job? _activeJob;
     private Job? _lastFailure;
+    private List<Job> _summarizationJobs = [];
     private Timer? _ticker;
     private bool _hasAudio;
     private bool _playerReady;
@@ -537,11 +537,13 @@ else
     private Transcript? CompareAgainst => _transcripts.FirstOrDefault(t => t.Id != Selected?.Id);
 
     /// <summary>
-    /// The in-flight summarisation for the shown transcript, if any. Read straight from the
-    /// singleton so the progress bar renders correctly on a plain page load — the polling script
-    /// keeps it moving after that, again without needing a circuit.
+    /// The most recent summarisation job for the shown transcript, if any. Read straight from the
+    /// loaded jobs so the progress bar renders correctly on a plain page load — the polling
+    /// script keeps it moving after that, again without needing a circuit.
     /// </summary>
-    private SummaryRun? SummaryRun => Selected is { } t ? Runner.For(t.Id) : null;
+    private Job? SummaryJob => Selected is { } t
+        ? _summarizationJobs.FirstOrDefault(j => j.TranscriptId == t.Id)
+        : null;
 
     protected override void OnInitialized()
     {
@@ -584,7 +586,7 @@ else
             .ToListAsync();
 
         var jobs = await db.Jobs
-            .Where(j => j.EpisodeId == EpisodeId)
+            .Where(j => j.EpisodeId == EpisodeId && j.Kind == JobKind.Transcription)
             .OrderByDescending(j => j.CreatedAt)
             .Take(10)
             .ToListAsync();
@@ -593,6 +595,12 @@ else
         _lastFailure = _activeJob is null
             ? jobs.FirstOrDefault(j => j.State is JobState.Failed or JobState.Cancelled)
             : null;
+
+        _summarizationJobs = await db.Jobs
+            .Where(j => j.EpisodeId == EpisodeId && j.Kind == JobKind.Summarization)
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(10)
+            .ToListAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Data;
+using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services;
 using PodcastTranscription.Web.Services.Ingest;
 using PodcastTranscription.Web.Services.Maintenance;
@@ -193,7 +194,8 @@ public static class ActionEndpoints
             int id,
             HttpRequest request,
             AppDbContext db,
-            SummaryRunner runner,
+            ClaimsPrincipal user,
+            JobQueue queue,
             SummaryService summaries,
             CancellationToken ct) =>
         {
@@ -216,33 +218,44 @@ public static class ActionEndpoints
                 return Results.NotFound();
             }
 
-            // False means one is already in flight, which a double-click or a re-post makes
-            // likely. Redirecting to the same place either way lands on the progress bar.
-            runner.Start(transcriptId, id);
+            // Null means one is already queued or running, which a double-click or a re-post
+            // makes likely. Redirecting to the same place either way lands on the progress bar.
+            await queue.EnqueueSummarizationAsync(id, transcriptId, summaries.Model, SignedInName(user), ct);
 
             return Results.Redirect($"/episodes/{id}?transcript={transcriptId}");
         }).RequireAuthorization(Roles.MemberPolicy);
 
         // Polled by the progress bar while a summary is being written. JSON rather than a page,
         // because it is read several times a minute and nothing about it needs rendering.
-        app.MapGet("/episodes/{id:int}/summary-status", (int id, int transcriptId, SummaryRunner runner) =>
+        app.MapGet("/episodes/{id:int}/summary-status", async (
+            int id, int transcriptId, AppDbContext db, CancellationToken ct) =>
         {
-            var run = runner.For(transcriptId);
+            var job = await db.Jobs
+                .Where(j => j.EpisodeId == id && j.TranscriptId == transcriptId && j.Kind == JobKind.Summarization)
+                .OrderByDescending(j => j.CreatedAt)
+                .FirstOrDefaultAsync(ct);
 
-            return run is null
-                ? Results.Json(new { running = false, known = false })
-                : Results.Json(new
-                {
-                    running = !run.Finished,
-                    known = true,
-                    stage = run.Stage,
-                    pass = run.Pass,
-                    totalPasses = run.TotalPasses,
-                    percent = run.Percent,
-                    elapsedSeconds = (int)run.Elapsed.TotalSeconds,
-                    succeeded = run.Succeeded,
-                    error = run.Error
-                });
+            if (job is null)
+            {
+                return Results.Json(new { running = false, known = false });
+            }
+
+            var stage = job.TotalChunks > 0 ? $"Pass {job.CompletedChunks} of {job.TotalChunks}" : job.State.ToString();
+            var started = job.StartedAt ?? job.CreatedAt;
+            var elapsedSeconds = (int)((job.CompletedAt ?? DateTimeOffset.UtcNow) - started).TotalSeconds;
+
+            return Results.Json(new
+            {
+                running = JobDisplay.IsActive(job.State),
+                known = true,
+                stage,
+                pass = job.CompletedChunks,
+                totalPasses = job.TotalChunks,
+                percent = (int)(job.Progress * 100),
+                elapsedSeconds,
+                succeeded = job.State == JobState.Completed,
+                error = job.LastError
+            });
         });
 
         app.MapPost("/episodes/{id:int}/jobs/{jobId:int}/cancel", async (

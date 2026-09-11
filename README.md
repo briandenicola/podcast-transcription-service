@@ -146,6 +146,10 @@ restart. A **Send test notification** button confirms delivery before relying on
 either field blank on a later save keeps the value already stored, the same way the account
 password form works.
 
+The notification links straight back to the episode when `App:PublicBaseUrl` is set — unset, it
+carries no link, since a relative path is useless in a push notification and there is no address
+to guess it from.
+
 Uploaded or URL-pasted episodes have no feed to opt in on and are never notified — there is
 nothing to have configured for them. Sending never fails a job: a Pushover outage is logged and
 otherwise ignored, the same trade the pipeline already makes for summarisation errors.
@@ -384,22 +388,29 @@ while it happens. Set `OLLAMA_AUTO_SUMMARIZE=false` to leave it to the **Summari
 the episode page instead. Either way the button is there, and **Re-summarize** replaces the
 existing summary — unlike a transcript, it costs minutes rather than hours to make again.
 
-Pressing it starts the run in the background and returns immediately; the card then shows a
-progress bar naming the pass it is on — "Reading part 3 of 5", "Combining notes", "Writing the
-summary" — and how long it has been going. On a long episode that is several minutes of model
-time, and a bar that says which pass it is on is the difference between waiting and wondering
-whether it has hung.
+Pressing it queues the run and returns immediately, the same way transcription does: the job
+appears on the **Jobs** page as a `Summarizing` row, with its own progress bar naming the pass it
+is on — "Reading part 3 of 5", "Combining notes", "Writing the summary" — and the same
+cancel/retry controls a transcription job gets. The card on the episode page shows the same
+progress, driven by polling `/episodes/{id}/summary-status` rather than a live connection, so it
+works in the same places everything else does.
 
-The bar is driven by polling `/episodes/{id}/summary-status`, not by a circuit, so it works in
-the same places everything else does. The run belongs to the server rather than to the page:
-navigating away or closing the tab does not stop it, and coming back shows it still going. A
-second press while one is in flight is ignored rather than starting a second run.
+Concurrency is bounded by `Ollama:MaxConcurrentSummaries` (one, by default): pressing the button
+on several episodes in a row — or several people doing that at once — queues the extra runs
+rather than sending that many requests at Ollama simultaneously. A queued or running job for a
+transcript is not queued twice; the button on an already-running transcript is simply hidden
+until it finishes.
 
-Summarisation never fails a job. The transcript is written and marked complete *before* the
-model is asked for anything, so an Ollama that is down or a model that was never pulled costs
-the summary and nothing else: the job still completes, the failure is logged, and the button
-runs it again later. Losing an hour of GPU time because a language model was unreachable would
-be an absurd trade.
+The job survives a restart the same way a transcription job does: one interrupted mid-run is
+recovered as Queued and starts again from the beginning (there is no partial output to resume
+from, unlike a transcription's chunks). A failure retries with backoff up to `Ollama:MaxAttempts`
+before being left `Failed`, same as transcription — an Ollama that is briefly unreachable is not
+the end of the run.
+
+Summarisation never fails the *transcription* job it followed from. The transcript is written and
+marked complete before any of this happens, so an Ollama that is down or a model that was never
+pulled only costs the summary. Losing an hour of GPU time because a language model was
+unreachable would be an absurd trade.
 
 One summary is kept per transcript, so re-transcribing on a better model gets its own and the
 old one stays attached to the old text.
@@ -428,6 +439,9 @@ and `.env`.
 | `Ollama:BaseUrl` | `http://localhost:11434` | Where Ollama is listening. Ollama binds to `127.0.0.1` unless started with `OLLAMA_HOST=0.0.0.0`. |
 | `Ollama:Model` | `llama3.1:8b` | Must already be pulled on that server. Recorded against each summary. |
 | `Ollama:AutoSummarize` | `true` | Summarise at the end of every job. False leaves it to the button on the episode page. |
+| `Ollama:MaxConcurrentSummaries` | `1` | How many manually-triggered summaries (the button on the episode page) run at once; the rest queue as `Summarizing` jobs on the Jobs page. |
+| `Ollama:MaxAttempts` | `3` | How many times a failed summarisation job retries before being left `Failed`. |
+| `Ollama:RetryBaseSeconds` | `30` | First retry delay for a failed summarisation job; doubles each attempt. |
 | `Ollama:ContextTokens` | `8192` | `num_ctx`. Ollama's own default is 2048, which silently truncates anything episode-sized. |
 | `Ollama:MaxWindowChars` | `12000` | How much transcript goes into one pass. Must fit inside `ContextTokens` with the prompt and answer allowed for. |
 | `Ollama:MaxOutputTokens` | `2048` | `num_predict`: ceiling on one answer. |
@@ -435,6 +449,7 @@ and `.env`.
 | `Ollama:Temperature` | `0.2` | Low on purpose. This is summarising, not writing. |
 | `Ollama:RequestTimeoutMinutes` | `30` | A long episode is several generate calls back to back, and a CPU-only model is slow. |
 | `Ollama:ExtraInstructions` | _(none)_ | Appended to the summary instructions. Where a show-specific steer goes. |
+| `App:PublicBaseUrl` | _(none)_ | This app's public address, e.g. `https://podcasts.example.com`. Only used to put a link back to the episode in a Pushover notification — unset, notifications carry no link. |
 | `Storage:DataPath` | `var/data` | Holds `app.db` and rolling logs. `/data` in the container. |
 | `Storage:MediaPath` | `var/media` | Source audio and prepared 16 kHz WAVs. `/media` in the container. |
 | `Storage:MaxUploadMb` | `2048` | Upload ceiling. |

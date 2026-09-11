@@ -2,6 +2,8 @@ using System.Net;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Services;
@@ -29,8 +31,8 @@ public class PushoverNotifierTests : IDisposable
 
     public void Dispose() => _connection.Dispose();
 
-    private static PushoverNotifier Create(AppDbContext db, FakeHttpClientFactory factory) =>
-        new(db, factory, NullLogger<PushoverNotifier>.Instance);
+    private static PushoverNotifier Create(AppDbContext db, FakeHttpClientFactory factory, string? publicBaseUrl = null) =>
+        new(db, factory, Options.Create(new AppOptions { PublicBaseUrl = publicBaseUrl }), NullLogger<PushoverNotifier>.Instance);
 
     private async Task<int> SeedEpisodeAsync(bool feedOptedIn)
     {
@@ -94,6 +96,39 @@ public class PushoverNotifierTests : IDisposable
 
         Assert.Single(factory.RequestedUrls);
         Assert.Contains("pushover.net", factory.RequestedUrls[0]);
+    }
+
+    [Fact]
+    public async Task Includes_an_episode_link_when_a_public_base_url_is_configured()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        db.PushoverSettings.Add(new PushoverSettings { AppToken = "token", UserKey = "user" });
+        await db.SaveChangesAsync();
+
+        var episodeId = await SeedEpisodeAsync(feedOptedIn: true);
+        var factory = new FakeHttpClientFactory(() => "{}");
+
+        await Create(db, factory, publicBaseUrl: "https://podcasts.example.com/")
+            .NotifyEpisodeAsync(episodeId, "Transcribed");
+
+        var body = System.Net.WebUtility.UrlDecode(factory.RequestedBodies[0]);
+        Assert.Contains($"url=https://podcasts.example.com/episodes/{episodeId}", body);
+        Assert.Contains("url_title=Open episode", body);
+    }
+
+    [Fact]
+    public async Task Omits_the_link_when_no_public_base_url_is_configured()
+    {
+        await using var db = new AppDbContext(_dbOptions);
+        db.PushoverSettings.Add(new PushoverSettings { AppToken = "token", UserKey = "user" });
+        await db.SaveChangesAsync();
+
+        var episodeId = await SeedEpisodeAsync(feedOptedIn: true);
+        var factory = new FakeHttpClientFactory(() => "{}");
+
+        await Create(db, factory).NotifyEpisodeAsync(episodeId, "Transcribed");
+
+        Assert.DoesNotContain("url=", factory.RequestedBodies[0]);
     }
 
     [Fact]

@@ -98,7 +98,7 @@ public class TranscriptionPipelineTests : IDisposable
     }
 
     private static PushoverNotifier CreatePushover(AppDbContext db) =>
-        new(db, new FakeHttpClientFactory(() => "{}"), NullLogger<PushoverNotifier>.Instance);
+        new(db, new FakeHttpClientFactory(() => "{}"), Options.Create(new AppOptions()), NullLogger<PushoverNotifier>.Instance);
 
     private TranscriptionPipeline CreatePipeline(
         AppDbContext db, HttpMessageHandler handler, AudioProcessor audio, TranscriptionOptions options,

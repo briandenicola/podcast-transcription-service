@@ -29,6 +29,22 @@ public class OllamaOptions
     public bool AutoSummarize { get; set; } = true;
 
     /// <summary>
+    /// How many manually-triggered summaries (the button on the episode page) run at once. The
+    /// button used to fire a background task per click with no limit at all, so pressing it on
+    /// several episodes in a row — or a few people doing that at once — could send that many
+    /// concurrent requests at Ollama. Anything past this queues and runs in submission order.
+    /// Low by default: one generate call is already several minutes of a small model's time, and
+    /// most self-hosted Ollama installs have exactly one GPU to share across them.
+    /// </summary>
+    public int MaxConcurrentSummaries { get; set; } = 1;
+
+    /// <summary>Give up after this many attempts and leave the job Failed, same shape as transcription's cap.</summary>
+    public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>First retry delay for a failed summarisation job; doubles each attempt.</summary>
+    public int RetryBaseSeconds { get; set; } = 30;
+
+    /// <summary>
     /// A long episode is several generate calls back to back, and a CPU-only Ollama is slow.
     /// The 100 s HttpClient default would abandon most of them.
     /// </summary>

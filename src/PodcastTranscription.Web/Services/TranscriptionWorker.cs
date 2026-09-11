@@ -37,7 +37,7 @@ public class TranscriptionWorker(
         {
             using var scope = scopeFactory.CreateScope();
             var queue = scope.ServiceProvider.GetRequiredService<JobQueue>();
-            await queue.RecoverOrphanedJobsAsync(ct);
+            await queue.RecoverOrphanedJobsAsync(JobKind.Transcription, ct);
         }
         catch (Exception ex)
         {
@@ -116,7 +116,9 @@ public class TranscriptionWorker(
         var now = DateTimeOffset.UtcNow;
 
         var candidate = await db.Jobs
-            .Where(j => j.State == JobState.Queued && (j.NextAttemptAt == null || j.NextAttemptAt <= now))
+            .Where(j => j.Kind == JobKind.Transcription
+                     && j.State == JobState.Queued
+                     && (j.NextAttemptAt == null || j.NextAttemptAt <= now))
             .OrderBy(j => j.CreatedAt)
             .Select(j => j.Id)
             .FirstOrDefaultAsync(ct);
@@ -127,7 +129,7 @@ public class TranscriptionWorker(
         }
 
         var claimed = await db.Jobs
-            .Where(j => j.Id == candidate && j.State == JobState.Queued)
+            .Where(j => j.Id == candidate && j.Kind == JobKind.Transcription && j.State == JobState.Queued)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.State, JobState.Preparing)
                 .SetProperty(j => j.StartedAt, now)

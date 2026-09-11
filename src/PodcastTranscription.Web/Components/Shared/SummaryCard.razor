@@ -7,7 +7,7 @@
    live Blazor circuit — and without one the button did nothing at all. *@
 <div class="summary-card" id="summary-card"
      data-episode="@EpisodeId" data-transcript="@TranscriptId"
-     data-running="@(Run is { Finished: false } ? "true" : "false")">
+     data-running="@(IsActive ? "true" : "false")">
     <div class="summary-titlebar">
         <span aria-hidden="true">📝</span>
         <span class="summary-title">Summary</span>
@@ -16,7 +16,7 @@
             <span class="summary-meta font-monospace" title="@Provenance(written)">@written.Model</span>
         }
         <span class="summary-actions">
-            @if (Run is null or { Finished: true })
+            @if (!IsActive)
             {
                 <AuthorizeView Policy="@Roles.MemberPolicy">
                     <form method="post" action="/episodes/@EpisodeId/summarize">
@@ -32,27 +32,37 @@
     </div>
 
     <div class="summary-body">
-        @if (Run is { Finished: false } running)
+        @if (IsActive && Job is { } running)
         {
             @* Real progress, not a spinner: a long episode is read in several passes and each one
                is minutes of model time, so "part 3 of 6" is the difference between waiting and
                wondering whether it is broken. Driven by a poll, so it moves without a circuit. *@
             <div class="upload-progress-label">
                 <span class="upload-hourglass" aria-hidden="true"></span>
-                <span id="summary-stage">@running.Stage</span>
+                <span id="summary-stage">@Stage(running)</span>
             </div>
             <div class="progress mt-2" role="progressbar" aria-label="Summarisation progress"
-                 aria-valuenow="@running.Percent" aria-valuemin="0" aria-valuemax="100">
-                <div class="progress-bar" id="summary-bar" style="width: @running.Percent%;"></div>
+                 aria-valuenow="@((int)(running.Progress * 100))" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" id="summary-bar" style="width: @((int)(running.Progress * 100))%;"></div>
             </div>
             <div class="summary-footer text-muted">
-                <span id="summary-elapsed">@((int)running.Elapsed.TotalSeconds)s</span> elapsed ·
+                <span id="summary-elapsed">@ElapsedSeconds(running)s</span> elapsed ·
                 @ModelName · this page updates itself, and the run carries on if you leave it.
             </div>
+            @if (running is { State: JobState.Queued, LastError: { } retrying })
+            {
+                @* A failed attempt still under its retry cap sits here, waiting on the backoff
+                   delay — worth explaining, since the bar otherwise looks stuck at 0%. *@
+                <div class="small text-muted mt-1">Retrying after: @retrying</div>
+            }
         }
-        else if (Run is { Finished: true, Succeeded: false, Error: { } failure })
+        else if (Job is { State: JobState.Failed, LastError: { } failure })
         {
             <div class="alert alert-danger mb-0">@failure</div>
+        }
+        else if (Job is { State: JobState.Cancelled })
+        {
+            <div class="alert alert-warning mb-0">Cancelled.</div>
         }
         else if (Error is { } error)
         {
@@ -89,8 +99,8 @@
 
     [Parameter, EditorRequired] public int TranscriptId { get; set; }
 
-    /// <summary>The run in flight, or the one that just finished. Null when none was ever started.</summary>
-    [Parameter] public SummaryRun? Run { get; set; }
+    /// <summary>The most recent summarisation job for this transcript, if any. Null when none was ever queued.</summary>
+    [Parameter] public Job? Job { get; set; }
 
     /// <summary>False when Ollama is not configured, which turns the button into an explanation.</summary>
     [Parameter] public bool Enabled { get; set; }
@@ -99,6 +109,17 @@
 
     /// <summary>The configured model, for the empty state — <see cref="Summary"/> carries its own.</summary>
     [Parameter] public string ModelName { get; set; } = "the configured model";
+
+    private bool IsActive => Job is not null && JobDisplay.IsActive(Job.State);
+
+    private static string Stage(Job job) =>
+        job.TotalChunks > 0 ? $"Pass {job.CompletedChunks} of {job.TotalChunks}" : job.State.ToString();
+
+    private static int ElapsedSeconds(Job job)
+    {
+        var started = job.StartedAt ?? job.CreatedAt;
+        return (int)((job.CompletedAt ?? DateTimeOffset.UtcNow) - started).TotalSeconds;
+    }
 
     /// <summary>
     /// Cached against the text it was built from: the render walks the whole summary, and this

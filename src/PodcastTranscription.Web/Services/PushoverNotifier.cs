@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PodcastTranscription.Web.Configuration;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 
@@ -13,9 +15,14 @@ namespace PodcastTranscription.Web.Services;
 /// Losing an hour of transcription because Pushover's API was unreachable would be a far worse
 /// failure than a silent missed notification.
 /// </summary>
-public class PushoverNotifier(AppDbContext db, IHttpClientFactory httpClientFactory, ILogger<PushoverNotifier> log)
+public class PushoverNotifier(
+    AppDbContext db,
+    IHttpClientFactory httpClientFactory,
+    IOptions<AppOptions> options,
+    ILogger<PushoverNotifier> log)
 {
     private const string ApiUrl = "https://api.pushover.net/1/messages.json";
+    private readonly AppOptions _options = options.Value;
 
     /// <summary>
     /// Notifies for one episode's event, but only when its feed opted in and credentials are
@@ -53,7 +60,8 @@ public class PushoverNotifier(AppDbContext db, IHttpClientFactory httpClientFact
             }
 
             var (success, error) = await SendAsync(
-                settings.AppToken, settings.UserKey, feed.Title, $"{eventLabel}: {episode.Title}", ct);
+                settings.AppToken, settings.UserKey, feed.Title, $"{eventLabel}: {episode.Title}",
+                EpisodeUrl(episode.Id), "Open episode", ct);
 
             if (!success)
             {
@@ -69,6 +77,12 @@ public class PushoverNotifier(AppDbContext db, IHttpClientFactory httpClientFact
             log.LogWarning(ex, "Could not send a Pushover notification for episode {EpisodeId}", episodeId);
         }
     }
+
+    /// <summary>The episode's link, when a public URL is configured. Pushover requires an absolute URL, so there is nothing to send without one.</summary>
+    private string? EpisodeUrl(int episodeId) =>
+        string.IsNullOrWhiteSpace(_options.PublicBaseUrl)
+            ? null
+            : $"{_options.PublicBaseUrl.TrimEnd('/')}/episodes/{episodeId}";
 
     /// <summary>Reads back whether both credentials are set, for the settings page — never the values themselves.</summary>
     public async Task<bool> IsConfiguredAsync(CancellationToken ct = default)
@@ -116,11 +130,12 @@ public class PushoverNotifier(AppDbContext db, IHttpClientFactory httpClientFact
         }
 
         return await SendAsync(settings.AppToken, settings.UserKey, "Podcast Transcription",
-            "This is a test notification.", ct);
+            "This is a test notification.", url: null, urlTitle: null, ct);
     }
 
     private async Task<(bool Success, string? Error)> SendAsync(
-        string appToken, string userKey, string title, string message, CancellationToken ct)
+        string appToken, string userKey, string title, string message,
+        string? url, string? urlTitle, CancellationToken ct)
     {
         try
         {
@@ -132,6 +147,15 @@ public class PushoverNotifier(AppDbContext db, IHttpClientFactory httpClientFact
                 ["title"] = title,
                 ["message"] = message
             };
+
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                form["url"] = url;
+                if (!string.IsNullOrWhiteSpace(urlTitle))
+                {
+                    form["url_title"] = urlTitle;
+                }
+            }
 
             using var response = await http.PostAsync(ApiUrl, new FormUrlEncodedContent(form), ct);
             if (response.IsSuccessStatusCode)

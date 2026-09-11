@@ -83,6 +83,10 @@ else
                 <tr>
                     <td>
                         <a href="/episodes/@job.EpisodeId">@(job.Episode?.Title ?? $"Episode {job.EpisodeId}")</a>
+                        @if (job.Kind == JobKind.Summarization)
+                        {
+                            <span class="badge bg-light text-dark ms-1">summarize</span>
+                        }
                         @if (job.Attempts > 1)
                         {
                             <span class="badge bg-light text-dark ms-1">attempt @job.Attempts</span>
@@ -113,7 +117,7 @@ else
                         </div>
                         @if (job.TotalChunks > 0)
                         {
-                            <div class="small text-muted">chunk @job.CompletedChunks of @job.TotalChunks</div>
+                            <div class="small text-muted">@ChunkLabel(job)</div>
                         }
                     </td>
                     <td class="text-end font-monospace">@JobDisplay.Elapsed(job)</td>
@@ -175,7 +179,7 @@ else
 
                 @if (job.TotalChunks > 0)
                 {
-                    <div class="pwa-job-chunks">chunk @job.CompletedChunks of @job.TotalChunks</div>
+                    <div class="pwa-job-chunks">@ChunkLabel(job)</div>
                 }
 
                 <div class="pwa-job-meta">
@@ -250,6 +254,11 @@ else
     ];
 
     private List<Job>? _jobs;
+
+    private static string ChunkLabel(Job job) =>
+        job.Kind == JobKind.Summarization
+            ? $"pass {job.CompletedChunks} of {job.TotalChunks}"
+            : $"chunk {job.CompletedChunks} of {job.TotalChunks}";
 
     [SupplyParameterFromQuery(Name = "error")] private string? DeleteError { get; set; }
     [SupplyParameterFromQuery(Name = "state")] private string? State { get; set; }

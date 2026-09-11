@@ -55,6 +55,43 @@ public class JobQueue(
     }
 
     /// <summary>
+    /// Queues a manual summarisation of a transcript. Returns null instead of a duplicate job
+    /// when one is already queued or running for the same transcript, so a double-click — or a
+    /// page reload that re-posts — does not queue a second one.
+    /// </summary>
+    public async Task<Job?> EnqueueSummarizationAsync(
+        int episodeId, int transcriptId, string model, string? queuedBy = null, CancellationToken ct = default)
+    {
+        var alreadyQueued = await db.Jobs.AnyAsync(j =>
+            j.Kind == JobKind.Summarization &&
+            j.TranscriptId == transcriptId &&
+            (j.State == JobState.Queued || j.State == JobState.Summarizing), ct);
+
+        if (alreadyQueued)
+        {
+            return null;
+        }
+
+        var job = new Job
+        {
+            EpisodeId = episodeId,
+            TranscriptId = transcriptId,
+            Kind = JobKind.Summarization,
+            State = JobState.Queued,
+            Model = model,
+            QueuedBy = queuedBy
+        };
+
+        db.Jobs.Add(job);
+        await db.SaveChangesAsync(ct);
+
+        log.LogInformation("Queued summarisation job {JobId} for transcript {TranscriptId}{By}",
+            job.Id, transcriptId, queuedBy is null ? "" : $" for {queuedBy}");
+        notifier.Notify(job.Id);
+        return job;
+    }
+
+    /// <summary>
     /// Cancels a job whether it is running or merely queued. A running job is signalled and
     /// marks itself cancelled when it unwinds; a queued one is marked here and never claimed.
     /// </summary>
@@ -109,21 +146,29 @@ public class JobQueue(
     /// Resets jobs left mid-flight by a crash or a container restart. Nothing can still be
     /// running at startup, so anything in a working state is orphaned by definition. Their
     /// chunk plans and completed chunks survive, so they resume rather than start over.
+    ///
+    /// Scoped to one <paramref name="kind"/> because <see cref="TranscriptionWorker"/> and
+    /// <see cref="Summarization.SummarizationWorker"/> both call this at startup, each from its
+    /// own scope; without the filter they would race over the same rows and re-queue jobs that
+    /// belong to the other worker.
     /// </summary>
-    public async Task<int> RecoverOrphanedJobsAsync(CancellationToken ct = default)
+    public async Task<int> RecoverOrphanedJobsAsync(JobKind kind, CancellationToken ct = default)
     {
         var orphaned = await db.Jobs
-            .Where(j => j.State == JobState.Downloading
-                     || j.State == JobState.Preparing
-                     || j.State == JobState.Transcribing
-                     || j.State == JobState.Summarizing)
+            .Where(j => j.Kind == kind
+                     && (j.State == JobState.Downloading
+                      || j.State == JobState.Preparing
+                      || j.State == JobState.Transcribing
+                      || j.State == JobState.Summarizing))
             .ToListAsync(ct);
 
         foreach (var job in orphaned)
         {
             job.State = JobState.Queued;
             job.NextAttemptAt = null;
-            job.LastError = "Interrupted by a restart; resumed from the last completed chunk.";
+            job.LastError = kind == JobKind.Summarization
+                ? "Interrupted by a restart; will restart from the beginning."
+                : "Interrupted by a restart; resumed from the last completed chunk.";
         }
 
         if (orphaned.Count > 0)

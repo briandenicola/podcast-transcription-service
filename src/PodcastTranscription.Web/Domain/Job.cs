@@ -7,6 +7,9 @@ public class Job
     public int EpisodeId { get; set; }
     public Episode? Episode { get; set; }
 
+    /// <summary>What kind of work this is. Determines which worker claims it and how it runs.</summary>
+    public JobKind Kind { get; set; } = JobKind.Transcription;
+
     public JobState State { get; set; } = JobState.Queued;
     public string Model { get; set; } = string.Empty;
     public string? Language { get; set; }
