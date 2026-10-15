@@ -1,0 +1,135 @@
+@page "/api-keys"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Endpoints
+@using PodcastTranscription.Web.Domain
+@using PodcastTranscription.Web.Endpoints
+@using PodcastTranscription.Web.Services.Security
+@attribute [Authorize(Policy = ApiKeyEndpoints.ManagementPolicy)]
+@attribute [ExcludeFromInteractiveRouting]
+@inject ApiKeyStore Keys
+
+<PageTitle>API keys</PageTitle>
+
+<h1 class="h3 mb-1">API keys</h1>
+<p class="text-muted small">
+    Manage your keys for external integrations. All keys can read episode status.
+    Members and Admins can also allow URL submissions. Keys never grant more access than your current role.
+</p>
+
+@if (_message is not null)
+{
+    <div class="alert @(_secret is null ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+@if (Revoked is not null)
+{
+    <div class="alert @(Revoked == true ? "alert-success" : "alert-danger")" role="alert">
+        @(Revoked == true ? "Key revoked." : "That key could not be revoked. It may no longer exist or your account may be inactive.")
+    </div>
+}
+@if (_secret is not null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <label class="form-label" for="new-key">Copy this key now. It is shown only in this response.</label>
+            <input id="new-key" class="form-control font-monospace" value="@_secret"
+                   readonly autocomplete="off" spellcheck="false" />
+        </div>
+    </div>
+}
+
+<div class="table-wrap mb-4">
+    <table class="table">
+        <thead>
+            <tr><th>Name</th><th>Prefix</th><th>Permissions</th><th>Created</th><th>Last used</th><th>State</th><th></th></tr>
+        </thead>
+        <tbody>
+            @if (_keys.Count == 0)
+            {
+                <tr><td colspan="7" class="text-muted">No keys yet.</td></tr>
+            }
+            @foreach (var key in _keys)
+            {
+                <tr>
+                    <td>@key.Name</td>
+                    <td><code>@key.Prefix...</code></td>
+                    <td>@(key.CanSubmit ? "Read, submit (Members/Admins only)" : "Read")</td>
+                    <td>@key.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    <td>@(key.LastUsedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "never")</td>
+                    <td>@(key.RevokedAt is null ? "active" : "revoked")</td>
+                    <td>
+                        @if (key.RevokedAt is null)
+                        {
+                            <form method="post" action="/api-keys/@key.Id/revoke">
+                                <AntiforgeryToken />
+                                <button type="submit" class="btn btn-sm">Revoke</button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header py-2 fw-semibold">Create a key</div>
+    <div class="card-body">
+        <EditForm Model="Input" method="post" FormName="create-api-key" OnSubmit="CreateKey">
+            <div class="mb-3">
+                <label class="form-label" for="key-name">Name</label>
+                <InputText id="key-name" class="form-control" @bind-Value="Input.Name"
+                           maxlength="100" required placeholder="e.g. Home automation" />
+            </div>
+            @if (_canSubmit)
+            {
+                <div class="form-check mb-3">
+                    <InputCheckbox id="key-submit" class="form-check-input" @bind-Value="Input.CanSubmit" />
+                    <label class="form-check-label" for="key-submit">Allow episode URL submissions</label>
+                </div>
+            }
+            <button type="submit" class="btn btn-primary">Create key</button>
+        </EditForm>
+        <p class="form-text">Only a SHA-256 hash is stored. Revoke a key to stop it working immediately.</p>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm(FormName = "create-api-key")] private KeyInput Input { get; set; } = default!;
+    [SupplyParameterFromQuery] private bool? Revoked { get; set; }
+
+    private List<ApiKey> _keys = [];
+    private bool _canSubmit;
+    private string? _secret;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Input ??= new();
+        HttpContext.Response.Headers.CacheControl = "no-store";
+        HttpContext.Response.Headers.Pragma = "no-cache";
+        await LoadKeys();
+    }
+
+    private async Task CreateKey()
+    {
+        var result = await Keys.CreateAsync(HttpContext.User, Input.Name, Input.CanSubmit,
+            HttpContext.RequestAborted);
+        _secret = result.Secret;
+        _message = result.Message;
+        Input = new();
+        await LoadKeys();
+    }
+
+    private async Task LoadKeys()
+    {
+        _keys = await Keys.ListAsync(HttpContext.User, HttpContext.RequestAborted);
+        _canSubmit = await Keys.CanSubmitAsync(HttpContext.User, HttpContext.RequestAborted);
+    }
+
+    private sealed class KeyInput
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool CanSubmit { get; set; }
+    }
+}

@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Feed> Feeds => Set<Feed>();
     public DbSet<Summary> Summaries => Set<Summary>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PushoverSettings> PushoverSettings => Set<PushoverSettings>();
     public DbSet<DeletedFeedItem> DeletedFeedItems => Set<DeletedFeedItem>();
 
@@ -101,6 +102,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             // Stored as the integer, so renumbering the enum would relabel every account.
             e.Property(x => x.Role).HasConversion<int>();
+        });
+
+        b.Entity<ApiKey>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.HasIndex(x => x.KeyHash).IsUnique();
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.ToTable("ApiKeys", table => table.HasCheckConstraint("CK_ApiKeys_Owner",
+                "(UserId IS NOT NULL AND ConfiguredUsername IS NULL) OR "
+                + "(UserId IS NULL AND ConfiguredUsername IS NOT NULL)"));
         });
 
         b.Entity<Feed>(e => e.HasIndex(x => x.RssUrl).IsUnique());

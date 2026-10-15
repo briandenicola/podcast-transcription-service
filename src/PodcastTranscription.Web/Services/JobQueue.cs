@@ -41,7 +41,7 @@ public class JobQueue(
             Language = language ?? feed?.DefaultLanguage,
             Prompt = prompt ?? feed?.DefaultPrompt,
 
-            // Null when nobody asked: a feed poll, or a submission through the API.
+            // Null for feed polls and shared-key submissions; per-user keys retain attribution.
             QueuedBy = queuedBy
         };
 

@@ -73,13 +73,27 @@ fixed them and when, in the tooltip on the **edited** badge.
 Both store a **username rather than a foreign key**, deliberately. Attribution is a record of
 what happened, so it must not change when an account is renamed or removed — and the configured
 admin has no row to point at in the first place. Blank means nobody asked: a feed poll, or a
-submission through the API.
+submission with the legacy shared API key. Per-user API submissions record the key owner's username.
 
 ### Submission API
 
 `POST /api/episodes` with an `X-API-Key` header, so cron jobs and other tools can feed it without
-the UI. Disabled entirely until `API_KEY` is set — an API with no key is not an API worth
-exposing.
+the UI. Sign in and open **API keys** at **/api-keys** to create a named key for an integration.
+Copy the secret when it is created: it is shown only in that response, never in a URL or log,
+and only its SHA-256 hash is stored. The page lists prefixes, creation and last-used times,
+permissions and revocation state. Users see and revoke only their own keys, including the
+configured admin, which does not need a database account.
+
+Every key can read episode status. **Allow episode URL submissions** is optional and available
+only to Members and Admins. The owner's current account state and role are checked on every
+API request: deactivation or deletion blocks access, and a downgrade to Viewer removes submission
+permission immediately. Revocation blocks subsequent requests without a restart.
+
+The existing `API_KEY` / `Auth:ApiKey` shared key still works alongside per-user keys, with its
+previous read and submit access. It does not attribute submissions to a user and is not managed
+or revoked from the UI; remove or rotate its configuration and restart to retire it. Per-user
+keys work even when `API_KEY` is unset. Without any valid key, API requests receive `401`
+JSON errors, not login redirects; a read-only key attempting submission receives `403`.
 
 ```bash
 curl -X POST http://localhost:8080/api/episodes \
@@ -87,8 +101,17 @@ curl -X POST http://localhost:8080/api/episodes \
   -d '{"url":"https://example.com/episode.mp3","show":"The Build Log"}'
 ```
 
-`GET /api/episodes/{id}` returns the transcripts and the latest job, which is enough to poll for
-completion.
+`GET /api/episodes/{id}` uses the same header and returns transcript metadata and the latest job,
+which is enough to poll for completion. A successful submission returns `201` with `episodeId`,
+`jobId`, `status`, and the UI `url`, plus a `Location` header pointing at the status endpoint.
+These are the only two external API operations; uploads, full transcript downloads, feeds and
+job management are not exposed through per-user API keys.
+
+Key management uses authenticated, antiforgery-protected forms, not a Blazor websocket. Key
+responses are marked `no-store`. The database migration is applied automatically on the next
+application startup; existing accounts, episodes and the shared key are preserved.
+If rolling back the application, leave the additive key table and migration history intact;
+the previous version ignores them and continues using the configured shared key.
 
 ### Corrections and comparison
 
@@ -473,7 +496,7 @@ and `.env`.
 | `Auth:Username` | `admin` | |
 | `Auth:PasswordHash` | _(none)_ | Preferred. Generate it on the settings page. |
 | `Auth:Password` | _(none)_ | Plaintext fallback; the app logs a warning when it is used. |
-| `Auth:ApiKey` | _(none)_ | Unset leaves `POST /api/episodes` disabled rather than unauthenticated. |
+| `Auth:ApiKey` | _(none)_ | Optional legacy shared key. Per-user keys are managed at `/api-keys` and work without it. |
 | `Maintenance:DeleteSourceAfterTranscription` | `false` | Prune source audio once an episode has a finished transcript. |
 | `Maintenance:DeleteSourceAfterDays` | `30` | Grace period before source audio is eligible. |
 | `Maintenance:BackupsToKeep` | `7` | Nightly `VACUUM INTO` backups retained. |

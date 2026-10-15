@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Services;
@@ -13,34 +14,12 @@ public static class EpisodeApiEndpoints
 {
     public static void MapEpisodeApiEndpoints(this WebApplication app)
     {
-        // Authenticated by API key rather than the admin cookie, so cron jobs and scripts can
-        // submit without holding a session. AllowAnonymous only bypasses the cookie policy —
-        // the filter below still rejects anything without a valid key.
         var api = app.MapGroup("/api")
-            .AllowAnonymous()
-            .AddEndpointFilter(async (context, next) =>
-            {
-                var admin = context.HttpContext.RequestServices.GetRequiredService<AdminAuthenticator>();
-
-                if (!admin.ApiEnabled)
-                {
-                    // No key configured means the API is off, not that any key will do.
-                    return Results.Problem(
-                        "The submission API is disabled. Set Auth:ApiKey to enable it.",
-                        statusCode: StatusCodes.Status503ServiceUnavailable);
-                }
-
-                var presented = context.HttpContext.Request.Headers[AdminAuthenticator.ApiKeyHeader].ToString();
-                if (!admin.ValidateApiKey(presented))
-                {
-                    return Results.Problem("Missing or invalid API key.", statusCode: StatusCodes.Status401Unauthorized);
-                }
-
-                return await next(context);
-            });
+            .RequireAuthorization(ApiKeyAuthenticationHandler.ReadPolicy);
 
         api.MapPost("/episodes", async (
             SubmitEpisodeRequest request,
+            ClaimsPrincipal principal,
             EpisodeImporter importer,
             JobQueue queue,
             ILoggerFactory loggerFactory,
@@ -59,7 +38,8 @@ public static class EpisodeApiEndpoints
             try
             {
                 var episode = await importer.ImportFromUrlAsync(request.Url, request.Title, request.Show, ct);
-                var job = await queue.EnqueueAsync(episode.Id, request.Language, request.Prompt, ct: ct);
+                var job = await queue.EnqueueAsync(episode.Id, request.Language, request.Prompt,
+                    queuedBy: principal.Identity?.Name, ct: ct);
 
                 log.LogInformation("API submitted episode {EpisodeId} as job {JobId}", episode.Id, job.Id);
 
@@ -78,7 +58,7 @@ public static class EpisodeApiEndpoints
                     ["url"] = [ex.Message]
                 });
             }
-        });
+        }).RequireAuthorization(ApiKeyAuthenticationHandler.SubmitPolicy);
 
         // Enough to poll for completion without opening the UI.
         api.MapGet("/episodes/{id:int}", async (int id, AppDbContext db, CancellationToken ct) =>

@@ -31,8 +31,8 @@ public class AuthOptions
     public string? Password { get; set; }
 
     /// <summary>
-    /// Key for <c>POST /api/episodes</c>, sent as <c>X-API-Key</c>. The submission endpoint is
-    /// disabled entirely when this is unset — an API with no key is not an API worth exposing.
+    /// Optional legacy shared key for the episode API, sent as <c>X-API-Key</c>.
+    /// Per-user keys work independently of this setting.
     /// </summary>
     public string? ApiKey { get; set; }
 

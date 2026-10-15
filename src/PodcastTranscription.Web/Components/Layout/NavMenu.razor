@@ -48,6 +48,16 @@
         </div>
     </AuthorizeView>
 
+    <AuthorizeView>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="api-keys">
+                <span class="nav-icon" aria-hidden="true">K</span>
+                <span class="metro-icon" aria-hidden="true">K</span>
+                <span class="nav-label">API keys</span>
+            </NavLink>
+        </div>
+    </AuthorizeView>
+
     <AuthorizeView Policy="@Roles.AdminPolicy">
         <div class="nav-item">
             <NavLink class="nav-link" href="users">
@@ -99,6 +109,7 @@
             </AuthorizeView>
             <AuthorizeView>
                 <Authorized>
+                    <NavLink href="api-keys">API keys</NavLink>
                     <form method="post" action="/logout">
                         <AntiforgeryToken />
                         <button type="submit" class="metro-menu-action">sign out</button>

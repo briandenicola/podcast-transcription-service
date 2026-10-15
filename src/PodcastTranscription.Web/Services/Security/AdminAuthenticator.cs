@@ -46,7 +46,7 @@ public class AdminAuthenticator
     /// <summary>True when a password is configured in either form.</summary>
     public bool HasPassword => _passwordHash is not null;
 
-    /// <summary>False when no API key is configured, which disables the submission endpoint.</summary>
+    /// <summary>True when the legacy shared API key is configured. Per-user keys are independent.</summary>
     public bool ApiEnabled => !string.IsNullOrWhiteSpace(_options.ApiKey);
 
     public TimeSpan SessionLength => TimeSpan.FromDays(Math.Clamp(_options.SessionDays, 1, 365));

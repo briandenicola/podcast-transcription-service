@@ -105,6 +105,7 @@ builder.Services.AddScoped<FeedService>();
 builder.Services.AddScoped<PodcastUrlResolver>();
 builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddScoped<UserStore>();
+builder.Services.AddApiKeyAccess();
 builder.Services.AddScoped<SignInService>();
 builder.Services.AddScoped<TranscriptSummarizer>();
 builder.Services.AddScoped<SummaryService>();
@@ -235,6 +236,7 @@ app.MapUploadEndpoints();
 app.MapDeletionEndpoints();
 app.MapActionEndpoints();
 app.MapUserEndpoints();
+app.MapApiKeyEndpoints();
 app.MapMediaEndpoints();
 app.MapExportEndpoints();
 

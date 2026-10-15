@@ -16,6 +16,56 @@ namespace PodcastTranscription.Web.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
+            modelBuilder.Entity("PodcastTranscription.Web.Domain.ApiKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("CanSubmit")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConfiguredUsername")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LastUsedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("RevokedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ApiKeys", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ApiKeys_Owner", "(UserId IS NOT NULL AND ConfiguredUsername IS NULL) OR (UserId IS NULL AND ConfiguredUsername IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("PodcastTranscription.Web.Domain.AppUser", b =>
                 {
                     b.Property<int>("Id")
@@ -429,6 +479,16 @@ namespace PodcastTranscription.Web.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("TranscriptChunks");
+                });
+
+            modelBuilder.Entity("PodcastTranscription.Web.Domain.ApiKey", b =>
+                {
+                    b.HasOne("PodcastTranscription.Web.Domain.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PodcastTranscription.Web.Domain.Episode", b =>
