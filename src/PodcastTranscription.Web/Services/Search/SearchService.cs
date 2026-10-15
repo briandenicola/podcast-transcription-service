@@ -1,4 +1,5 @@
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using PodcastTranscription.Web.Data;
 
@@ -59,7 +60,8 @@ public class SearchService(AppDbContext db, ILogger<SearchService> log)
 
             return new SearchResults(input!, hits.Count, grouped);
         }
-        catch (Exception ex)
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 1
+            && ex.Message.Contains("fts5:", StringComparison.OrdinalIgnoreCase))
         {
             // A MATCH that SQLite rejects is bad user input, not a server fault.
             log.LogWarning(ex, "Search failed for {Query} (match expression {Match})", input, match);

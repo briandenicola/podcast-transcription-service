@@ -84,8 +84,9 @@ and only its SHA-256 hash is stored. The page lists prefixes, creation and last-
 permissions and revocation state. Users see and revoke only their own keys, including the
 configured admin, which does not need a database account.
 
-Every key can read episode status. **Allow episode URL submissions** is optional and available
-only to Members and Admins. The owner's current account state and role are checked on every
+Every key can read episodes, transcripts, summaries and search results.
+**Allow episode URL submissions** is optional and available only to Members and Admins.
+The owner's current account state and role are checked on every
 API request: deactivation or deletion blocks access, and a downgrade to Viewer removes submission
 permission immediately. Revocation blocks subsequent requests without a restart.
 
@@ -104,8 +105,38 @@ curl -X POST http://localhost:8080/api/episodes \
 `GET /api/episodes/{id}` uses the same header and returns transcript metadata and the latest job,
 which is enough to poll for completion. A successful submission returns `201` with `episodeId`,
 `jobId`, `status`, and the UI `url`, plus a `Location` header pointing at the status endpoint.
-These are the only two external API operations; uploads, full transcript downloads, feeds and
-job management are not exposed through per-user API keys.
+The read endpoints below use the same header and read permission; no submission permission is
+needed. Uploads, feeds and job management are not exposed through API keys.
+
+#### Reading episodes, transcripts and search results
+
+| Request | Response |
+|---|---|
+| `GET /api/episodes?limit=30&show=` | JSON array of recent episodes: `id`, `title`, `show`, `publishedAt`, `durationSec`, `latestJob` (`state`, `progress`) and `summaryPreview`. |
+| `GET /api/episodes/{id}/transcript` | Object with `segments` (`startMs`, `endMs`, `text`) and `summary` (`content` in Markdown, `model`). |
+| `GET /api/search?q=pricing` | JSON array of hits: `episodeId`, `title`, `startMs`, `excerpt`. Excerpts are plain text without highlighting markers. |
+
+The episode list defaults to 30 results; `limit` must be from 1 to 100. Results are newest first
+by publication date, falling back to creation date when publication is unknown. `show` matches
+an exact show name; omitted or empty means all shows. An episode without a job has `latestJob: null`.
+`summaryPreview` is the first 300 characters of the latest completed transcript's summary,
+or `null` when that transcript has no summary.
+
+The transcript endpoint selects the latest **completed** transcript, never a newer partial run.
+Segments are in playback order. Its own summary is returned unchanged, or `null` if absent;
+an older transcript's summary is never substituted. A missing episode or completed transcript
+returns `404`.
+
+Search uses the same full-text index and query handling as the UI, with up to 100 hits, best
+matches first. Missing, blank or punctuation-only queries return `400`; no matches returns `[]`.
+Invalid list limits also return `400`. Database failures are server errors, not empty search results.
+Episode API data responses are marked `no-store`.
+
+```bash
+curl 'http://localhost:8080/api/episodes?limit=30&show=' -H "X-API-Key: $API_KEY"
+curl http://localhost:8080/api/episodes/1/transcript -H "X-API-Key: $API_KEY"
+curl 'http://localhost:8080/api/search?q=pricing' -H "X-API-Key: $API_KEY"
+```
 
 Key management uses authenticated, antiforgery-protected forms, not a Blazor websocket. Key
 responses are marked `no-store`. The database migration is applied automatically on the next

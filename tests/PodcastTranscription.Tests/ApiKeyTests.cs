@@ -26,11 +26,12 @@ using PodcastTranscription.Web.Data;
 using PodcastTranscription.Web.Domain;
 using PodcastTranscription.Web.Endpoints;
 using PodcastTranscription.Web.Services;
+using PodcastTranscription.Web.Services.Search;
 using PodcastTranscription.Web.Services.Security;
 
 namespace PodcastTranscription.Tests;
 
-public class ApiKeyTests : IAsyncLifetime
+public partial class ApiKeyTests : IAsyncLifetime
 {
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
     private WebApplication _app = default!;
@@ -73,6 +74,7 @@ public class ApiKeyTests : IAsyncLifetime
         builder.Services.AddScoped<MediaStore>();
         builder.Services.AddScoped<AudioProcessor>();
         builder.Services.AddScoped<JobQueue>();
+        builder.Services.AddScoped<SearchService>();
         builder.Services.AddSingleton<RunningJobs>();
         builder.Services.AddSingleton<JobNotifier>();
         builder.Services.AddHttpClient<WhisperClient>();
@@ -101,7 +103,7 @@ public class ApiKeyTests : IAsyncLifetime
         var member = new AppUser { Username = "member", PasswordHash = "unused", Role = UserRole.Member };
         var viewer = new AppUser { Username = "viewer", PasswordHash = "unused", Role = UserRole.Viewer };
         db.Users.AddRange(member, viewer);
-        db.Episodes.Add(new Episode { Title = "Existing episode" });
+        db.Episodes.Add(new Episode { Title = "Existing episode", CreatedAt = DateTimeOffset.UnixEpoch });
         await db.SaveChangesAsync();
         _memberId = member.Id;
         _viewerId = viewer.Id;
