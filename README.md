@@ -138,6 +138,26 @@ curl http://localhost:8080/api/episodes/1/transcript -H "X-API-Key: $API_KEY"
 curl 'http://localhost:8080/api/search?q=pricing' -H "X-API-Key: $API_KEY"
 ```
 
+#### The life store feed
+
+`GET /api/lifestore/records` lists **every** episode, for the household life store to read in full on
+each poll. It uses the same header and read permission. Each record is
+`{kind: "episode", id, updatedAt, data}`, where `data` has the episode's `title`, `show`, `feed`,
+`sourceUrl`, `publishedAt`, `durationSec` and `createdAt`, and `transcript`: the latest **completed**
+transcript's `model`, `language`, `completedAt`, `qualityWarning`, `summary` (`content`, `model`) and
+`passages`. A passage joins consecutive segments into about 2,000 characters (`startMs`, `endMs`,
+`text`), breaking only between segments. An episode with no completed transcript has
+`transcript: null`. `updatedAt` is the latest of the episode's creation, the transcript's completion
+and the summary's.
+
+Pages are in id order. `limit` defaults to 10 and is held to 1–25, because transcripts are large.
+Pass the response's `next` as `page` for the following page; `next` is `null` on the last page, and a
+`page` the feed did not give out returns `400`. Deleted episodes simply stop being listed.
+
+```bash
+curl 'http://localhost:8080/api/lifestore/records?limit=25' -H "X-API-Key: $API_KEY"
+```
+
 Key management uses authenticated, antiforgery-protected forms, not a Blazor websocket. Key
 responses are marked `no-store`. The database migration is applied automatically on the next
 application startup; existing accounts, episodes and the shared key are preserved.

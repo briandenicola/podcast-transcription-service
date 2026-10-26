@@ -243,6 +243,7 @@ app.MapExportEndpoints();
 app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapEpisodeApiEndpoints();
+app.MapLifestoreEndpoints();
 
 app.Run();
 
