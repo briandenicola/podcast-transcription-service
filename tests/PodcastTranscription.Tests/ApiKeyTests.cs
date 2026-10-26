@@ -84,6 +84,7 @@ public partial class ApiKeyTests : IAsyncLifetime
         _app.UseAuthorization();
         _app.UseAntiforgery();
         _app.MapEpisodeApiEndpoints();
+        _app.MapLifestoreEndpoints();
         _app.MapApiKeyEndpoints();
         _app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         _app.MapGet("/test-login/{id:int}", async (int id, HttpContext context, AppDbContext db,
