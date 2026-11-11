@@ -12,7 +12,7 @@ RUN dotnet publish src/PodcastTranscription.Web/PodcastTranscription.Web.csproj 
     -c Release -o /app/publish --no-restore
 
 # ---- runtime --------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 
 # yt-dlp and ffmpeg are both fetched below as self-contained static binaries rather than from
 # apt. apt's ffmpeg pulls in ~180 packages (fontconfig, libsdl2, X11 libraries, audio backends)
